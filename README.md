@@ -41,6 +41,12 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   invoice you're editing (Reuse menu).
 - Templates carry items, terms, tax, notes and payment details — not the customer
   or the dates. Start one from the sidebar's New menu; manage them in the Library.
+- Clearing a number field means zero. SwiftUI's `TextField(value:format:)`
+  parses on every keystroke and restores the old value when the parse fails —
+  and an empty string is a failed parse, so deleting the last digit of "500"
+  silently puts 500 back. Every number field here keeps the text as its state
+  and lets the value follow: empty is zero, and a half-typed "1." leaves the
+  field alone instead of fighting you. `--selftest-fields` covers it.
 - Undo/redo (⌘Z / ⇧⌘Z) across every edit, with edits made in a burst collapsed
   into a single step.
 - Live page preview beside the editor, paginated exactly like the exported PDF.

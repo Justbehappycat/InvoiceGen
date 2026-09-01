@@ -423,7 +423,7 @@ struct InvoiceEditorView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Text("Discount").frame(width: 90, alignment: .leading)
-                    TextField("0", value: $invoice.discountValue, format: .number)
+                    DecimalField(placeholder: "0", value: $invoice.discountValue)
                         .frame(width: 90)
                     Picker("", selection: $invoice.discountIsPercent) {
                         Text(invoice.currencyCode).tag(false)
@@ -440,7 +440,7 @@ struct InvoiceEditorView: View {
                 HStack(spacing: 8) {
                     Text("Tax").frame(width: 90, alignment: .leading)
                     TextField("Tax", text: $invoice.taxLabel).frame(width: 90)
-                    TextField("0", value: $invoice.taxRate, format: .number).frame(width: 70)
+                    DecimalField(placeholder: "0", value: $invoice.taxRate).frame(width: 70)
                     Text("%").foregroundColor(.secondary)
                     Spacer()
                     Text(Fmt.currency(invoice.taxAmount, code: invoice.currencyCode))
@@ -449,7 +449,7 @@ struct InvoiceEditorView: View {
 
                 HStack(spacing: 8) {
                     Text("Amount paid").frame(width: 90, alignment: .leading)
-                    TextField("0", value: $invoice.amountPaid, format: .number).frame(width: 90)
+                    DecimalField(placeholder: "0", value: $invoice.amountPaid).frame(width: 90)
                     Button("Mark fully paid") {
                         invoice.amountPaid = invoice.total
                         invoice.status = .paid
@@ -566,12 +566,10 @@ struct LineItemRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            TextField("1", value: $item.quantity, format: .number)
-                .multilineTextAlignment(.trailing)
+            DecimalField(placeholder: "1", value: $item.quantity, alignment: .trailing)
                 .frame(width: 56)
                 .padding(.leading, 4)
-            TextField("0", value: $item.price, format: .number)
-                .multilineTextAlignment(.trailing)
+            DecimalField(placeholder: "0", value: $item.price, alignment: .trailing)
                 .frame(width: 86)
                 .padding(.leading, 4)
             Text(Fmt.currency(item.amount, code: currencyCode))

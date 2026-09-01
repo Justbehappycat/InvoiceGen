@@ -812,6 +812,41 @@ struct InvoiceGenApp: App {
             }
             exit(0)
         }
+        if args.contains("--selftest-fields") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            // Deleting the last digit must reach zero, not restore the old
+            // number — the failure this test exists for.
+            var value: Decimal = 500
+            for typed in ["50", "5", ""] {
+                if let next = DecimalField.value(for: typed) { value = next }
+            }
+            print("500 → 50 → 5 → empty gives:", "\(value)", value == 0 ? "ok" : "FAILED")
+
+            let cases: [(String, Decimal?)] = [
+                ("", 0), ("0", 0), ("12", 12), ("12.5", 12.5), ("1,250", 1250),
+                // Half-typed "1." on the way to "1.5" means 1 — the totals stay
+                // live and the field keeps the dot, because the text is the
+                // state and only a *different* value rewrites it.
+                (" 7 ", 7), ("1.", 1), ("-", nil), ("abc", nil), ("12abc", nil), ("1.2.3", nil),
+            ]
+            for (text, expected) in cases {
+                let actual = DecimalField.value(for: text)
+                let match = actual == expected
+                // %s with a Swift String crashes; pad in Swift instead.
+                let shown = "\"\(text)\"".padding(toLength: 9, withPad: " ", startingAt: 0)
+                let got = (actual.map { "\($0)" } ?? "leave").padding(toLength: 7, withPad: " ", startingAt: 0)
+                print("  " + shown + "→ " + got
+                      + (match ? "ok" : "FAILED (expected \(expected.map { "\($0)" } ?? "leave"))"))
+            }
+
+            print("integer empty falls to its floor:",
+                  IntegerField.value(for: "", minimum: 1) == 1 ? "ok" : "FAILED")
+            print("integer clamps below the floor:",
+                  IntegerField.value(for: "0", minimum: 1) == 1 ? "ok" : "FAILED")
+            print("integer takes a number:",
+                  IntegerField.value(for: "42", minimum: 0) == 42 ? "ok" : "FAILED")
+            exit(0)
+        }
         if args.contains("--selftest-columns") {
             _ = NSApplication.shared
             let store = AppStore.shared

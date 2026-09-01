@@ -69,8 +69,8 @@ struct CatalogView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 10) {
                                     TextField("Item name", text: $item.title)
-                                    TextField("0", value: $item.price, format: .number)
-                                        .multilineTextAlignment(.trailing)
+                                    DecimalField(placeholder: "0", value: $item.price,
+                                                 alignment: .trailing)
                                         .frame(width: 100)
                                     Text(store.data.business.currencyCode)
                                         .foregroundColor(.secondary)

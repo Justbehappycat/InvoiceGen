@@ -439,7 +439,7 @@ struct SettingsView: View {
                     Spacer()
 
                     Text("Payment terms")
-                    TextField("", value: business.defaultPaymentTermDays, format: .number)
+                    IntegerField(placeholder: "0", value: business.defaultPaymentTermDays)
                         .frame(width: 50)
                     Text("days").foregroundColor(.secondary)
                 }
@@ -467,10 +467,10 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("Next invoice number")
-                    TextField("", value: Binding(
+                    IntegerField(placeholder: "1", value: Binding(
                         get: { store.data.nextInvoiceNumber },
-                        set: { store.data.nextInvoiceNumber = max(1, $0) }
-                    ), format: .number)
+                        set: { store.data.nextInvoiceNumber = $0 }
+                    ), minimum: 1)
                     .frame(width: 70)
                     Spacer()
                 }
