@@ -274,11 +274,14 @@ enum Verification {
     enum BannerStripes {
         static let x: CGFloat = 8
         static let width: CGFloat = 384
-        static let top: CGFloat = 8
-        static let bottom: CGFloat = 110
+        // Edge to edge: the bars reach the banner's own boundaries, top and
+        // bottom, so the block reads as ruled rather than as a strip floating
+        // inside a margin.
+        static let top: CGFloat = 0
+        static let bottom: CGFloat = 118
         /// Rows to sample: above the title and below it. The title occupies
         /// the middle of the banner, so these two stay clear of it.
-        static let sampleRows: [CGFloat] = [18, 26, 96, 104]
+        static let sampleRows: [CGFloat] = [10, 20, 100, 110]
     }
 
     // MARK: - Print contrast

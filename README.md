@@ -49,8 +49,9 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 
 **Invoice verification**
 - **Stripes across the banner** (default): the code runs the banner's full
-  height behind the title and nearly the full width of the coloured block, so a
-  reading taken above or below the word crosses every column. The stripes print as a tint of the banner — a slider sets how
+  height behind the title — edge to edge, top and bottom — and nearly the full
+  width of the coloured block, so a reading taken above or below the word
+  crosses every column. The stripes print as a tint of the banner — a slider sets how
   dark, from 2% to 40%.
 - **The app reads its own mark**, which is why the tint can be that light. A
   scanner needs 0.70 print contrast because it knows nothing about the page:
