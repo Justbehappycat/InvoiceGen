@@ -24,6 +24,12 @@ struct PDFVerificationReport {
 
     /// The page's own numbers reproduce the code the page carries.
     var pageIsSelfConsistent: Bool?
+    /// The app read its own mark off the page: how much of the pattern
+    /// matched what the page's own numbers should have produced. A high score
+    /// is proof; a low one proves nothing — the sheet may simply carry the
+    /// mark in a different style, or none — so it can confirm but never
+    /// accuse.
+    var stripeAgreement: Double?
     /// Differences against the invoice of the same number held in the app.
     var differencesFromRecord: [String] = []
     var recordFound = false
@@ -48,6 +54,11 @@ struct PDFVerificationReport {
 }
 
 enum PDFVerifier {
+    /// How much of the sampled pattern must agree before the reading counts as
+    /// confirmation. Rendered pages are exact, so a genuine mark scores 100%;
+    /// anything appreciably below that is a different mark or no mark at all.
+    static let stripeMatchThreshold = 0.95
+
 
     @MainActor
     static func verify(url: URL, store: AppStore) -> PDFVerificationReport {
@@ -85,6 +96,13 @@ enum PDFVerifier {
         }
 
         guard let code = report.scannedCode ?? report.printedCode else { return report }
+        if let agreement = readOwnMark(document: document, expecting: code),
+           agreement >= Self.stripeMatchThreshold {
+            report.stripeAgreement = agreement
+            report.notes.append(String(
+                format: "The app read the mark on the page directly: %.0f%% of the pattern "
+                    + "matches what these numbers should produce.", agreement * 100))
+        }
         guard let key else {
             report.notes.append("No verification passphrase is set on this Mac, so the "
                 + "signature can't be recomputed.")
@@ -130,6 +148,42 @@ enum PDFVerifier {
             }
         }
         return report
+    }
+
+    /// Our own reader. A scanner needs contrast because it knows nothing about
+    /// the page; we know where the mark is and what it should say, so we can
+    /// sample it and compare. That is what lets the bars be a few percent off
+    /// the banner colour instead of near-black.
+    private static func readOwnMark(document: PDFDocument, expecting code: String) -> Double? {
+        guard let page = document.page(at: 0) else { return nil }
+        let bounds = page.bounds(for: .mediaBox)
+        let scale: CGFloat = 4
+        let size = NSSize(width: bounds.width * scale, height: bounds.height * scale)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        if let context = NSGraphicsContext.current?.cgContext {
+            context.scaleBy(x: scale, y: scale)
+            page.draw(with: .mediaBox, to: context)
+        }
+        image.unlockFocus()
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let cg = bitmap.cgImage else { return nil }
+
+        let expected = Verification.moduleColumns(for: code)
+        guard !expected.isEmpty else { return nil }
+        let geometry = StripeReader.Geometry(
+            x: Verification.BannerStripes.x,
+            width: Verification.BannerStripes.width,
+            sampleRows: Verification.BannerStripes.sampleRows
+        )
+        guard let reading = StripeReader.read(
+            image: cg, pageWidth: bounds.width, pageHeight: bounds.height,
+            geometry: geometry, moduleCount: expected.count
+        ) else { return nil }
+        return StripeReader.agreement(reading.pattern, expected)
     }
 
     // MARK: - Reading the page

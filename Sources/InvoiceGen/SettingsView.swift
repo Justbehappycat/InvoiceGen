@@ -199,14 +199,25 @@ struct SettingsView: View {
                 Toggle("Print the barcode on invoices", isOn: business.printVerificationCode)
                     .disabled(!store.hasVerificationPassphrase)
 
-                Picker("The mark", selection: business.verificationMarkContained) {
-                    Text("Inside the letters — nothing sticks out").tag(true)
-                    Text("With a strip below — stays a working barcode").tag(false)
+                Picker("The mark", selection: business.verificationMarkStyle) {
+                    ForEach(VerificationMarkStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
                 }
                 .pickerStyle(.radioGroup)
                 .disabled(!store.hasVerificationPassphrase)
 
-                if !store.data.business.verificationMarkContained {
+                if store.data.business.verificationMarkStyle == .banner {
+                    HStack(spacing: 10) {
+                        Text("Stripe tone")
+                        Slider(value: business.verificationBarTone, in: 0.02...0.40)
+                            .frame(width: 200)
+                        Text(String(format: "%.0f%%", store.data.business.verificationBarTone * 100))
+                            .font(.callout.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.leading, 16)
+                } else if store.data.business.verificationMarkStyle == .strip {
                     Picker("Strip tone", selection: business.verificationStripInk) {
                         Text("Quiet — matches the banner").tag(false)
                         Text("Ink — readable by a scanner").tag(true)
@@ -278,7 +289,20 @@ struct SettingsView: View {
     /// barcode that isn't one.
     @ViewBuilder
     private var markNote: some View {
-        if store.data.business.verificationMarkContained {
+        if store.data.business.verificationMarkStyle == .banner {
+            let tone = store.data.business.verificationBarTone
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "app.badge.checkmark").foregroundColor(.green)
+                Text(String(format: "Stripes at %.0f%% — print contrast %.2f, far under the "
+                     + "0.70 a handheld scanner needs, and that's fine: the app reads its own "
+                     + "mark by sampling where it knows the stripes are and comparing against "
+                     + "the pattern these numbers should produce. Tested down to 2%%. Drop the "
+                     + "PDF here to check one.", tone * 100, tone))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else if store.data.business.verificationMarkStyle == .letters {
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "textformat").foregroundColor(.secondary)
                 Text("The code is cut into the letterforms and nothing extends past them. "

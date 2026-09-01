@@ -38,6 +38,11 @@ struct BusinessProfile: Codable, Hashable {
     /// True: the mark stays inside the letterforms (decorative).
     /// False: it grows a strip below the word and stays a working barcode.
     var verificationMarkContained: Bool = true
+    var verificationMarkStyle: VerificationMarkStyle = .banner
+    /// How much darker than the banner the bars print, 0…1. The app reads its
+    /// own mark by local contrast, so this can go as low as taste allows —
+    /// it does not have to clear the scanner standards' 0.70.
+    var verificationBarTone: Double = 0.10
 
     // Tolerant decoding: older data files simply lack the newer keys.
     enum CodingKeys: String, CodingKey {
@@ -46,6 +51,7 @@ struct BusinessProfile: Codable, Hashable {
         case defaultPaymentTermDays, defaultNotes, defaultFooterMessage, paymentMethods
         case defaultColumns, verificationPassphrase, verificationSalt, printVerificationCode
         case verificationStripInk, verificationMarkContained
+        case verificationMarkStyle, verificationBarTone
     }
 
     init() {}
@@ -79,6 +85,10 @@ struct BusinessProfile: Codable, Hashable {
         verificationStripInk = try c.decodeIfPresent(Bool.self, forKey: .verificationStripInk) ?? false
         verificationMarkContained = try c.decodeIfPresent(
             Bool.self, forKey: .verificationMarkContained) ?? true
+        verificationMarkStyle = try c.decodeIfPresent(
+            VerificationMarkStyle.self, forKey: .verificationMarkStyle)
+            ?? (verificationMarkContained ? .letters : .strip)
+        verificationBarTone = try c.decodeIfPresent(Double.self, forKey: .verificationBarTone) ?? 0.10
     }
 
     var addressLines: [String] {
@@ -100,6 +110,27 @@ enum TemplateStyle: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .banner: return "Banner"
         case .minimal: return "Minimal"
+        }
+    }
+}
+
+/// Where the verification code lives on the sheet.
+enum VerificationMarkStyle: String, Codable, CaseIterable, Identifiable {
+    /// Cut into the letterforms; nothing extends past the word.
+    case letters
+    /// The word, growing a strip of the same columns below it.
+    case strip
+    /// Stripes across the banner, the title sitting over them — the bars run
+    /// the banner's full height, so a reading taken above or below the title
+    /// crosses every column.
+    case banner
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .letters: return "Inside the letters"
+        case .strip: return "Word with a strip below"
+        case .banner: return "Stripes across the banner"
         }
     }
 }

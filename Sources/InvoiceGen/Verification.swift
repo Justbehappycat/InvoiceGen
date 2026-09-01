@@ -233,6 +233,32 @@ enum Verification {
         return columns
     }
 
+    /// A bar that is `tone` darker than the surface it sits on — 0.10 means
+    /// ten percent of the way to black. Light enough to read as texture; the
+    /// app's own reader normalises against the local range, so it does not
+    /// need to clear a scanner's contrast floor.
+    static func barColor(onField field: NSColor, tone: Double) -> NSColor {
+        let base = field.usingColorSpace(.sRGB) ?? .white
+        let amount = CGFloat(max(0.01, min(1.0, tone)))
+        return NSColor(srgbRed: base.redComponent * (1 - amount),
+                       green: base.greenComponent * (1 - amount),
+                       blue: base.blueComponent * (1 - amount),
+                       alpha: 1)
+    }
+
+    /// The banner stripes' geometry, in PDF points from the page's top-left.
+    /// The drawer and the reader both use this — if they ever disagree, the
+    /// mark stops verifying, so there is exactly one definition.
+    enum BannerStripes {
+        static let x: CGFloat = 44
+        static let width: CGFloat = 320
+        static let top: CGFloat = 8
+        static let bottom: CGFloat = 110
+        /// Rows to sample: above the title and below it. The title occupies
+        /// the middle of the banner, so these two stay clear of it.
+        static let sampleRows: [CGFloat] = [18, 26, 96, 104]
+    }
+
     // MARK: - Print contrast
     //
     // Whether bars can sit straight on a coloured field is a print question,

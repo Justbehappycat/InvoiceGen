@@ -48,6 +48,21 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   are filled with rows before the totals block moves to a sheet of its own.
 
 **Invoice verification**
+- **Stripes across the banner** (default): the code runs the banner's full
+  height behind the title, so a reading taken above or below the word crosses
+  every column. The stripes print as a tint of the banner — a slider sets how
+  dark, from 2% to 40%.
+- **The app reads its own mark**, which is why the tint can be that light. A
+  scanner needs 0.70 print contrast because it knows nothing about the page:
+  not where the symbol is, not how big, not what it should say. The app knows
+  all three, so it samples the strip at a known position, normalises against
+  that strip's own range, and compares against the pattern the invoice's
+  numbers should produce. Measured, at every tint from 30% down to 2%: our
+  reader matches 100% of the pattern; a scanner manages only the 30% one.
+- The reading can confirm but never accuse: a high match is proof the mark
+  belongs to those numbers, while a low one just means the sheet carries the
+  mark differently, or not at all, so it never triggers a tamper verdict on
+  its own.
 - The invoice title *is* the mark: solid at the caps, combing open into the
   verification code down the letterforms. Two styles, chosen in Settings:
   **inside the letters** (default) keeps the mark exactly the shape of the

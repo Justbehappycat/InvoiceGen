@@ -180,6 +180,12 @@ struct VerifyInvoiceView: View {
                 if let quantity = report.quantity {
                     GridRow { Text("Items").gridColumnAlignment(.trailing); Text(Fmt.quantity(quantity)) }
                 }
+                if let agreement = report.stripeAgreement {
+                    GridRow {
+                        Text("Mark").gridColumnAlignment(.trailing)
+                        Text(String(format: "read off the page, %.0f%% match", agreement * 100))
+                    }
+                }
                 if let total = report.total {
                     GridRow {
                         Text("Total").gridColumnAlignment(.trailing)

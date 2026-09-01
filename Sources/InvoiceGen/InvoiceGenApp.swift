@@ -355,6 +355,11 @@ struct InvoiceGenApp: App {
             business.verificationSalt = Data(repeating: 0x2A, count: 16)
             business.verificationPassphrase = "sample passphrase"
             business.verificationStripInk = args.contains("ink")
+            business.verificationMarkStyle = .banner
+            if let index = args.firstIndex(of: "tone"), index + 1 < args.count,
+               let tone = Double(args[index + 1]) {
+                business.verificationBarTone = tone
+            }
 
             var customer = Customer()
             customer.name = "Harbour Coffee Roasters"
@@ -435,6 +440,29 @@ struct InvoiceGenApp: App {
                         .appendingPathComponent("ig-mark-\(name).pdf")
                     try? data.write(to: url)
                     return url
+                }
+
+                // How light can the bars go before our own reader loses them?
+                print("— banner stripes, read by the app itself")
+                for tone in [0.30, 0.15, 0.08, 0.04, 0.02] {
+                    var profile = business
+                    profile.verificationMarkStyle = .banner
+                    profile.verificationBarTone = tone
+                    guard let data = PDFExporter.makePDFData(
+                        invoice: invoice, customer: customer, business: profile) else { continue }
+                    let url = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("ig-tone.pdf")
+                    try? data.write(to: url)
+                    let report = PDFVerifier.verify(url: url, key: key, invoices: [invoice])
+                    let field = NSColor(Color(hex: profile.accentHex))
+                    let bars = Verification.barColor(onField: field, tone: tone)
+                    let pcs = Verification.printContrast(bars: bars, onField: field)
+                    print(String(format: "  tone %.2f  PCS %.2f  scanner: %@  our reader: %@  verdict: %@",
+                                 tone, pcs,
+                                 report.scannedCode == nil ? "no " : "yes",
+                                 report.stripeAgreement.map { String(format: "%.0f%%", $0 * 100) } ?? "—",
+                                 "\(report.verdict)"))
+                    try? FileManager.default.removeItem(at: url)
                 }
 
                 // (label, contained, ink strip, must the bars decode?)

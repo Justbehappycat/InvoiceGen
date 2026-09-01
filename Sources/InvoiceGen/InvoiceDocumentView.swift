@@ -113,55 +113,7 @@ struct InvoiceDocumentView: View {
     private var header: some View {
         switch business.templateStyle {
         case .banner:
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Spacer(minLength: 0)
-                    if let verificationCode {
-                        // The title *is* the mark: solid at the top, combing
-                        // open into the code at its foot.
-                        // Ink letters, not white: the mark ramps from the
-                        // strip's tone into the letters, and a white title
-                        // would force that ramp to cross the banner colour
-                        // itself — muddy in the middle, no continuity.
-                        VerificationMark(
-                            title: displayTitle,
-                            code: verificationCode,
-                            ink: Color(nsColor: Verification.inkColor),
-                            field: accent,
-                            stripTone: business.verificationStripInk
-                                ? Color(nsColor: Verification.inkColor)
-                                : accentDark,
-                            containedInLetters: business.verificationMarkContained
-                        )
-                        .padding(.leading, 44)
-                        .padding(.bottom, 18)
-                    } else {
-                        Text(displayTitle)
-                            .font(.system(size: 30, weight: .regular))
-                            .foregroundColor(.white)
-                            .padding(.leading, 44)
-                            .padding(.bottom, 22)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: 118)
-                .background(accent)
-
-                VStack(alignment: .trailing, spacing: 4) {
-                    Spacer()
-                    Text("Amount Due (\(currency))")
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.92))
-                    Text(Fmt.currency(invoice.amountDue, code: currency))
-                        .font(.system(size: 26, weight: .regular))
-                        .foregroundColor(.white)
-                        .padding(.bottom, 16)
-                }
-                .padding(.trailing, 30)
-                .frame(width: 212, alignment: .trailing)
-                .frame(height: 118)
-                .background(accentDark)
-            }
+            bannerContent
         case .minimal:
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
@@ -219,6 +171,91 @@ struct InvoiceDocumentView: View {
                     .foregroundColor(Color(white: 0.45))
             }
         }
+    }
+
+
+    /// The banner's own furniture — title on the left, amount on the right.
+    private var bannerContent: some View {
+        HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Spacer(minLength: 0)
+                    // The banner style carries the code in the stripes behind
+                    // this, so the title is drawn plainly over them.
+                    if let verificationCode, business.verificationMarkStyle != .banner {
+                        // The title *is* the mark: solid at the top, combing
+                        // open into the code at its foot.
+                        // Ink letters, not white: the mark ramps from the
+                        // strip's tone into the letters, and a white title
+                        // would force that ramp to cross the banner colour
+                        // itself — muddy in the middle, no continuity.
+                        VerificationMark(
+                            title: displayTitle,
+                            code: verificationCode,
+                            ink: Color(nsColor: Verification.inkColor),
+                            field: accent,
+                            stripTone: business.verificationStripInk
+                                ? Color(nsColor: Verification.inkColor)
+                                : accentDark,
+                            containedInLetters: business.verificationMarkContained
+                        )
+                        .padding(.leading, 44)
+                        .padding(.bottom, 18)
+                    } else {
+                        Text(displayTitle)
+                            .font(.system(size: 30, weight: .regular))
+                            .foregroundColor(.white)
+                            .padding(.leading, 44)
+                            .padding(.bottom, 22)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 118)
+                .background {
+                    ZStack(alignment: .topLeading) {
+                        accent
+                        if let verificationCode, business.verificationMarkStyle == .banner {
+                            bannerStripes(verificationCode)
+                        }
+                    }
+                }
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Spacer()
+                    Text("Amount Due (\(currency))")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.92))
+                    Text(Fmt.currency(invoice.amountDue, code: currency))
+                        .font(.system(size: 26, weight: .regular))
+                        .foregroundColor(.white)
+                        .padding(.bottom, 16)
+                }
+                .padding(.trailing, 30)
+                .frame(width: 212, alignment: .trailing)
+                .frame(height: 118)
+                .background(accentDark)
+            }
+    }
+
+    /// Stripes across the banner, running its full height so a reading taken
+    /// above or below the title crosses every column.
+    private func bannerStripes(_ code: String) -> some View {
+        let columns = Verification.moduleColumns(for: code)
+        let geometry = Verification.BannerStripes.self
+        let moduleWidth = geometry.width / CGFloat(max(1, columns.count))
+        let tone = Color(nsColor: Verification.barColor(
+            onField: NSColor(accent), tone: business.verificationBarTone
+        ))
+        return Canvas { context, _ in
+            for (index, isBar) in columns.enumerated() where isBar {
+                let rect = CGRect(x: geometry.x + CGFloat(index) * moduleWidth,
+                                  y: geometry.top,
+                                  width: moduleWidth,
+                                  height: geometry.bottom - geometry.top)
+                context.fill(Path(rect), with: .color(tone))
+            }
+        }
+        .frame(height: 118)
+        .allowsHitTesting(false)
     }
 
     private var continuationHeader: some View {
