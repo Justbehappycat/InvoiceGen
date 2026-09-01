@@ -419,6 +419,18 @@ final class AppStore: ObservableObject {
         return copy
     }
 
+    /// Marking an invoice paid settles it in full — the whole point of the
+    /// gesture. ⌘Z puts back both the status and the amount.
+    func setStatus(_ status: InvoiceStatus, on id: UUID) {
+        guard let index = data.invoices.firstIndex(where: { $0.id == id }) else { return }
+        commitHistory()
+        data.invoices[index].status = status
+        if status == .paid {
+            data.invoices[index].amountPaid = data.invoices[index].total
+        }
+        commitHistory()
+    }
+
     func deleteInvoice(id: UUID) {
         data.invoices.removeAll { $0.id == id }
     }

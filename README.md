@@ -19,7 +19,13 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 - Banner template matching the sample invoice (accent color configurable) plus a Minimal template.
 - Line items with description, quantity, price, per-line taxable flag.
 - Discount (flat or %), tax at any rate, partial payments, amount due.
-- Status: Draft / Sent / Paid, with automatic overdue flagging.
+- Status: Draft / Sent / Paid, with automatic overdue flagging. Change it from
+  the sidebar's right-click menu; "Mark as Paid" also settles the amount (⌘Z
+  puts both back).
+- The sidebar leads with what still needs doing: overdue first, then unpaid by
+  soonest due date, then paid — visible and searchable, just sunk to the bottom.
+- "Today" beside the invoice date moves it to today and drags the due date with
+  it, so a 30-day invoice stays a 30-day invoice.
 - Duplicate any invoice, save one as a named template, or apply a template to the
   invoice you're editing (Reuse menu).
 - Templates carry items, terms, tax, notes and payment details — not the customer
@@ -159,6 +165,8 @@ And for checking layout at a given window size (writes a PNG of the real UI):
 ```
 
 The last argument is `invoices`, `customers`, `items`, `settings`, or `sidebar`.
+`--selftest-list` checks the sidebar ordering, the mark-as-paid gesture and its
+undo, and the payment-term arithmetic behind the Today button.
 `--selftest-columns [out.pdf]` renders the invoice with renamed and hidden
 columns and checks the printed text, including that a pre-feature data file
 still loads with every column visible.

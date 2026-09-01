@@ -337,6 +337,68 @@ struct InvoiceGenApp: App {
             vault.reset()
             exit(0)
         }
+        if args.contains("--selftest-list") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            _ = NSApplication.shared
+            MainActor.assumeIsolated {
+                let store = AppStore.shared
+                waitForSecrets(store)
+
+                // Ordering: overdue (0) before unpaid (1) before paid (2).
+                var overdue = Invoice(); overdue.number = "A"
+                overdue.dueDate = Date().addingTimeInterval(-10 * 86400)
+                overdue.items = [LineItem(title: "x", details: "", quantity: 1, price: 100)]
+                var unpaid = Invoice(); unpaid.number = "B"
+                unpaid.dueDate = Date().addingTimeInterval(10 * 86400)
+                unpaid.items = overdue.items
+                var paid = Invoice(); paid.number = "C"; paid.status = .paid
+                paid.items = overdue.items; paid.amountPaid = 100
+                let ranked = [paid, unpaid, overdue]
+                    .sorted { $0.sortRank < $1.sortRank }
+                    .map { $0.number }
+                print("sort order:", ranked, ranked == ["A", "B", "C"] ? "ok" : "FAILED")
+                print("paid sinks below overdue:", paid.sortRank > overdue.sortRank ? "yes" : "NO — FAILED")
+
+                // setStatus(.paid) settles the invoice, and undo restores both.
+                let created = store.newInvoice()
+                store.commitHistory()
+                guard let index = store.data.invoices.firstIndex(where: { $0.id == created.id })
+                else { print("FAILED to create"); exit(1) }
+                store.data.invoices[index].items = [
+                    LineItem(title: "Work", details: "", quantity: 2, price: 250)
+                ]
+                store.commitHistory()
+                let total = store.data.invoices[index].total
+                store.setStatus(.paid, on: created.id)
+                let after = store.data.invoices[index]
+                print("mark paid -> status:", after.status.label,
+                      "amountPaid:", "\(after.amountPaid)", "of total", "\(total)",
+                      after.status == .paid && after.amountPaid == total ? "ok" : "FAILED")
+                print("amount due is zero:", after.amountDue == 0 ? "yes" : "NO — FAILED")
+                store.undo()
+                let undone = store.data.invoices.first { $0.id == created.id }
+                print("undo restores:", undone?.status.label ?? "gone",
+                      "amountPaid \(undone?.amountPaid ?? -1)",
+                      undone?.status == .draft && undone?.amountPaid == 0 ? "ok" : "FAILED")
+
+                // "Today" keeps the payment term.
+                let calendar = Calendar.current
+                var invoice = Invoice()
+                invoice.issueDate = calendar.date(byAdding: .day, value: -9, to: Date())!
+                invoice.dueDate = calendar.date(byAdding: .day, value: 30, to: invoice.issueDate)!
+                let today = calendar.startOfDay(for: Date())
+                let term = calendar.dateComponents([.day], from: invoice.issueDate, to: invoice.dueDate).day!
+                invoice.issueDate = today
+                invoice.dueDate = calendar.date(byAdding: .day, value: term, to: today)!
+                let newTerm = calendar.dateComponents([.day], from: invoice.issueDate, to: invoice.dueDate).day!
+                print("today keeps the term:", newTerm == 30 ? "yes (30 days)" : "NO — FAILED (\(newTerm))")
+
+                store.deleteInvoice(id: created.id)
+                store.data.nextInvoiceNumber -= 1
+                store.saveNow()
+            }
+            exit(0)
+        }
         if args.contains("--selftest-columns") {
             _ = NSApplication.shared
             let store = AppStore.shared

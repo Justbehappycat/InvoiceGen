@@ -123,6 +123,19 @@ struct InvoiceEditorView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    /// Moving the invoice date drags the due date with it, so a 30-day invoice
+    /// stays a 30-day invoice instead of silently becoming a 12-day one.
+    private func setIssueDateToToday() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let term = calendar.dateComponents([.day], from: invoice.issueDate, to: invoice.dueDate).day
+        invoice.issueDate = today
+        if let term, term > 0 {
+            invoice.dueDate = calendar.date(byAdding: .day, value: term, to: today) ?? today
+        }
+        store.commitHistory()
+    }
+
     private func apply(_ template: InvoiceTemplate) {
         invoice.title = template.title
         invoice.items = template.items.map { item in
@@ -226,8 +239,15 @@ struct InvoiceEditorView: View {
                 }
                 GridRow {
                     Text("Invoice date")
-                    DatePicker("", selection: $invoice.issueDate, displayedComponents: .date)
-                        .labelsHidden()
+                    HStack(spacing: 6) {
+                        DatePicker("", selection: $invoice.issueDate, displayedComponents: .date)
+                            .labelsHidden()
+                        Button("Today") { setIssueDateToToday() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(Calendar.current.isDateInToday(invoice.issueDate))
+                            .help("Set the invoice date to today, keeping the same payment term")
+                    }
                     Text("Payment due")
                     DatePicker("", selection: $invoice.dueDate, displayedComponents: .date)
                         .labelsHidden()

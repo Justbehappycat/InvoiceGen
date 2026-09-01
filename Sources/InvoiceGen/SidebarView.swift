@@ -79,13 +79,22 @@ struct SidebarView: View {
     }
 
     private var filteredInvoices: [Invoice] {
-        store.data.invoices.filter { invoice in
+        let matches = store.data.invoices.filter { invoice in
             if let statusFilter, invoice.status != statusFilter { return false }
             guard !search.isEmpty else { return true }
             let customerName = store.customer(id: invoice.customerID)?.displayName ?? ""
             return invoice.number.localizedCaseInsensitiveContains(search)
                 || customerName.localizedCaseInsensitiveContains(search)
                 || invoice.items.contains { $0.title.localizedCaseInsensitiveContains(search) }
+        }
+        // What still needs doing floats up; settled invoices sink but stay
+        // visible and searchable. Overdue leads, then unpaid by soonest due,
+        // then paid by most recent.
+        return matches.sorted { a, b in
+            if a.sortRank != b.sortRank { return a.sortRank < b.sortRank }
+            if a.status == .paid { return a.issueDate > b.issueDate }
+            if a.dueDate != b.dueDate { return a.dueDate < b.dueDate }
+            return a.createdAt > b.createdAt
         }
     }
 
@@ -103,6 +112,24 @@ struct SidebarView: View {
                 InvoiceRow(invoice: invoice, customer: store.customer(id: invoice.customerID))
                     .tag(invoice.id)
                     .contextMenu {
+                        Menu("Status") {
+                            ForEach(InvoiceStatus.allCases) { status in
+                                Button {
+                                    store.setStatus(status, on: invoice.id)
+                                } label: {
+                                    // A checkmark on the current one, so the
+                                    // menu also answers "what is it now?"
+                                    Label(
+                                        status.label,
+                                        systemImage: invoice.status == status ? "checkmark" : ""
+                                    )
+                                }
+                            }
+                        }
+                        if invoice.status != .paid {
+                            Button("Mark as Paid") { store.setStatus(.paid, on: invoice.id) }
+                        }
+                        Divider()
                         Button("Duplicate") {
                             let copy = store.duplicate(invoice)
                             focus.invoiceID = copy.id

@@ -245,6 +245,12 @@ struct Invoice: Identifiable, Codable, Hashable {
 
     var amountDue: Decimal { (total - amountPaid).rounded(2) }
 
+    /// Sidebar ordering: overdue first, then everything still owed, then paid.
+    var sortRank: Int {
+        if status == .paid { return 2 }
+        return isOverdue ? 0 : 1
+    }
+
     var isOverdue: Bool {
         status != .paid && amountDue > 0 && dueDate < Calendar.current.startOfDay(for: Date())
     }
