@@ -14,7 +14,7 @@ struct CatalogView: View {
                         Text("Library").font(.title2.weight(.semibold))
                         Text("Reusable line items and whole-invoice templates.")
                             .font(.callout)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button {
@@ -32,9 +32,9 @@ struct CatalogView: View {
                                 HStack(spacing: 10) {
                                     TextField("Template name", text: $template.name)
                                     Text("\(template.items.count) item\(template.items.count == 1 ? "" : "s")")
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                     Text("Net \(template.paymentTermDays)")
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                     Button {
                                         let invoice = store.newInvoice(from: template)
                                         focus.invoiceID = invoice.id
@@ -42,11 +42,13 @@ struct CatalogView: View {
                                     } label: {
                                         Label("New invoice", systemImage: "plus")
                                     }
-                                    Button(role: .destructive) {
+                                    // Labelled, then shown icon-only: VoiceOver
+                                    // reads the name, the eye sees the glyph.
+                                    Button("Delete template", systemImage: "trash",
+                                           role: .destructive) {
                                         store.data.templates.removeAll { $0.id == template.id }
-                                    } label: {
-                                        Image(systemName: "trash")
                                     }
+                                    .labelStyle(.iconOnly)
                                     .buttonStyle(.borderless)
                                 }
                                 .padding(6)
@@ -60,7 +62,7 @@ struct CatalogView: View {
 
                 if store.data.catalog.isEmpty {
                     Text("Nothing saved yet. Create an item here, or use “Save to items library” on any invoice line.")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(.vertical, 30)
                         .frame(maxWidth: .infinity)
                 } else {
@@ -73,12 +75,12 @@ struct CatalogView: View {
                                                  alignment: .trailing)
                                         .frame(width: 100)
                                     Text(store.data.business.currencyCode)
-                                        .foregroundColor(.secondary)
-                                    Button(role: .destructive) {
+                                        .foregroundStyle(.secondary)
+                                    Button("Delete saved item", systemImage: "trash",
+                                           role: .destructive) {
                                         store.data.catalog.removeAll { $0.id == item.id }
-                                    } label: {
-                                        Image(systemName: "trash")
                                     }
+                                    .labelStyle(.iconOnly)
                                     .buttonStyle(.borderless)
                                 }
                                 TextField("Description (optional)", text: $item.details, axis: .vertical)

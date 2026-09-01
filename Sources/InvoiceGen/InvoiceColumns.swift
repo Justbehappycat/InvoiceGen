@@ -68,7 +68,7 @@ struct ColumnSettingsEditor: View {
                     titleField($columns.itemTitle, presets: InvoiceColumns.itemPresets, fallback: "Items")
                     Text("always shown")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 GridRow {
                     Text("Quantity").gridColumnAlignment(.trailing)
@@ -95,7 +95,7 @@ struct ColumnSettingsEditor: View {
             Text("Hidden columns are still yours to fill in — they just don't print. "
                  + "Totals always use quantity × price.")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

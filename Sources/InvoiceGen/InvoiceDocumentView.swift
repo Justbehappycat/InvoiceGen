@@ -90,7 +90,7 @@ struct InvoiceDocumentView: View {
                     if !invoice.footerMessage.isEmpty {
                         Text(invoice.footerMessage)
                             .font(.system(size: 10.5))
-                            .foregroundColor(Color(white: 0.42))
+                            .foregroundStyle(Color(white: 0.42))
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 24)
                     }
@@ -126,16 +126,16 @@ struct InvoiceDocumentView: View {
                         }
                         Text(business.name)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.black)
+                            .foregroundStyle(.black)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(invoice.title.isEmpty ? "INVOICE" : invoice.title)
                             .font(.system(size: 26, weight: .light))
-                            .foregroundColor(accent)
+                            .foregroundStyle(accent)
                         Text("Amount Due (\(currency)): \(Fmt.currency(invoice.amountDue, code: currency))")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.black)
+                            .foregroundStyle(.black)
                     }
                 }
                 Rectangle().fill(accent).frame(height: 3)
@@ -168,7 +168,7 @@ struct InvoiceDocumentView: View {
                 Text("Verification \(verificationCode) · "
                      + "\(Fmt.quantity(Verification.totalQuantity(of: invoice))) items")
                     .font(.system(size: 8, design: .monospaced))
-                    .foregroundColor(Color(white: 0.45))
+                    .foregroundStyle(Color(white: 0.45))
             }
         }
     }
@@ -203,7 +203,7 @@ struct InvoiceDocumentView: View {
                     } else {
                         Text(displayTitle)
                             .font(.system(size: 30, weight: .regular))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.leading, 44)
                             .padding(.bottom, 22)
                     }
@@ -223,10 +223,10 @@ struct InvoiceDocumentView: View {
                     Spacer()
                     Text("Amount Due (\(currency))")
                         .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.92))
+                        .foregroundStyle(.white.opacity(0.92))
                     Text(Fmt.currency(invoice.amountDue, code: currency))
                         .font(.system(size: 26, weight: .regular))
-                        .foregroundColor(.white)
+                        .foregroundStyle(.white)
                         .padding(.bottom, 16)
                 }
                 .padding(.trailing, 30)
@@ -262,11 +262,11 @@ struct InvoiceDocumentView: View {
         HStack {
             Text("\(displayTitle) #\(invoice.number) — continued")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.black)
+                .foregroundStyle(.black)
             Spacer()
             Text(customer?.displayName ?? "")
                 .font(.system(size: 11))
-                .foregroundColor(Color(white: 0.35))
+                .foregroundStyle(Color(white: 0.35))
         }
     }
 
@@ -277,22 +277,22 @@ struct InvoiceDocumentView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("BILL TO")
                     .font(.system(size: 10))
-                    .foregroundColor(Color(white: 0.55))
+                    .foregroundStyle(Color(white: 0.55))
                 Text(customer?.displayName ?? "—")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.black)
+                    .foregroundStyle(.black)
                 if let customer {
                     if !customer.contactName.isEmpty {
-                        Text(customer.contactName).font(.system(size: 11)).foregroundColor(.black)
+                        Text(customer.contactName).font(.system(size: 11)).foregroundStyle(.black)
                     }
                     ForEach(Array(customer.addressLines.enumerated()), id: \.offset) { _, line in
-                        Text(line).font(.system(size: 11)).foregroundColor(.black)
+                        Text(line).font(.system(size: 11)).foregroundStyle(.black)
                     }
                     if !customer.email.isEmpty {
-                        Text(customer.email).font(.system(size: 11)).foregroundColor(.black).padding(.top, 4)
+                        Text(customer.email).font(.system(size: 11)).foregroundStyle(.black).padding(.top, 4)
                     }
                     if !customer.phone.isEmpty {
-                        Text(customer.phone).font(.system(size: 11)).foregroundColor(.black)
+                        Text(customer.phone).font(.system(size: 11)).foregroundStyle(.black)
                     }
                 }
             }
@@ -319,11 +319,11 @@ struct InvoiceDocumentView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label)
                 .font(.system(size: 10.5, weight: .semibold))
-                .foregroundColor(.black)
+                .foregroundStyle(.black)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             Text(value)
                 .font(.system(size: 10.5, weight: valueBold ? .semibold : .regular))
-                .foregroundColor(.black)
+                .foregroundStyle(.black)
                 .frame(width: 118, alignment: .leading)
         }
     }
@@ -347,7 +347,7 @@ struct InvoiceDocumentView: View {
                 }
             }
             .font(.system(size: 9.5))
-            .foregroundColor(Color(white: 0.55))
+            .foregroundStyle(Color(white: 0.55))
             .padding(.bottom, 8)
 
             Rectangle().fill(Color(white: 0.88)).frame(height: 1)
@@ -357,11 +357,11 @@ struct InvoiceDocumentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.title)
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.black)
+                            .foregroundStyle(.black)
                         if !item.details.isEmpty && columns.showDescription {
                             Text(item.details)
                                 .font(.system(size: 10.5))
-                                .foregroundColor(Color(white: 0.25))
+                                .foregroundStyle(Color(white: 0.25))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -381,7 +381,7 @@ struct InvoiceDocumentView: View {
                     }
                 }
                 .font(.system(size: 11))
-                .foregroundColor(.black)
+                .foregroundStyle(.black)
                 .padding(.vertical, 11)
                 .padding(.horizontal, 6)
                 .background((page.start + offset).isMultiple(of: 2) ? Color(white: 0.965) : Color.white)
@@ -438,7 +438,7 @@ struct InvoiceDocumentView: View {
                 .font(.system(size: 11, weight: bold ? .semibold : .regular))
                 .frame(width: 110, alignment: .trailing)
         }
-        .foregroundColor(.black)
+        .foregroundStyle(.black)
     }
 
     // MARK: - Payment methods
@@ -453,7 +453,7 @@ struct InvoiceDocumentView: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text("HOW TO PAY")
                 .font(.system(size: 9.5))
-                .foregroundColor(Color(white: 0.55))
+                .foregroundStyle(Color(white: 0.55))
 
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
@@ -477,17 +477,17 @@ struct InvoiceDocumentView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(method.displayTitle)
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundColor(.black)
+                    .foregroundStyle(.black)
                 ForEach(method.filledFields) { field in
                     HStack(spacing: 4) {
                         if !field.label.isEmpty {
                             Text("\(field.label):")
                                 .font(.system(size: 9.5))
-                                .foregroundColor(Color(white: 0.45))
+                                .foregroundStyle(Color(white: 0.45))
                         }
                         Text(field.value)
                             .font(.system(size: 9.5))
-                            .foregroundColor(Color(white: 0.15))
+                            .foregroundStyle(Color(white: 0.15))
                     }
                 }
             }
@@ -500,10 +500,10 @@ struct InvoiceDocumentView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Notes / Terms")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.black)
+                .foregroundStyle(.black)
             Text(invoice.notes)
                 .font(.system(size: 10.5))
-                .foregroundColor(Color(white: 0.2))
+                .foregroundStyle(Color(white: 0.2))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 400, alignment: .leading)
         }
@@ -538,7 +538,7 @@ struct InvoiceDocumentView: View {
                     }
                     verificationFooterLine.padding(.top, 3)
                 }
-                .foregroundColor(.black)
+                .foregroundStyle(.black)
 
                 Spacer()
 
@@ -549,7 +549,7 @@ struct InvoiceDocumentView: View {
                     if !business.email.isEmpty { Text(business.email).font(.system(size: 11)) }
                     if !business.website.isEmpty { Text(business.website).font(.system(size: 11)) }
                 }
-                .foregroundColor(.black)
+                .foregroundStyle(.black)
             }
             .padding(.horizontal, 44)
             .padding(.vertical, 16)

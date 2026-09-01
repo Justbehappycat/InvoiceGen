@@ -30,7 +30,7 @@ struct PaymentMethodsEditor: View {
                         ForEach(method.filledFields) { field in
                             Text("\(field.label): \(PaymentLock.mask(field.value))")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
@@ -39,7 +39,7 @@ struct PaymentMethodsEditor: View {
             if methods.isEmpty {
                 Text("No payment methods yet.")
                     .font(.callout)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 8) {
@@ -49,11 +49,11 @@ struct PaymentMethodsEditor: View {
                     Label("Unlock to edit", systemImage: "lock.fill")
                 }
                 if let failure = lock.lastFailure {
-                    Text(failure).font(.caption).foregroundColor(.orange)
+                    Text(failure).font(.caption).foregroundStyle(.orange)
                 } else {
                     Text("Values are masked and read-only until you authenticate.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -64,7 +64,7 @@ struct PaymentMethodsEditor: View {
             HStack(spacing: 8) {
                 Label("Unlocked — re-locks after 5 minutes", systemImage: "lock.open.fill")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Button("Lock now") { lock.lock() }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
@@ -73,7 +73,7 @@ struct PaymentMethodsEditor: View {
             if methods.isEmpty {
                 Text("No payment methods yet — add one and it appears on the invoice under “How to Pay”.")
                     .font(.callout)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             ForEach($methods) { $method in
@@ -184,7 +184,7 @@ private struct PaymentMethodRow: View {
                     if field.isRequired {
                         Text(field.label)
                             .frame(width: 130, alignment: .leading)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     } else {
                         TextField("Label", text: $field.label)
                             .frame(width: 130)

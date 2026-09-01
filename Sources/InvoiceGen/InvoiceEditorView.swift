@@ -72,7 +72,7 @@ struct InvoiceEditorView: View {
     private func stateStrip(icon: String, tint: Color, text: String,
                             action: String, perform: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: icon).foregroundColor(tint)
+            Image(systemName: icon).foregroundStyle(tint)
             Text(text).font(.callout)
             Spacer()
             Button(action, action: perform).controlSize(.small)
@@ -235,18 +235,19 @@ struct InvoiceEditorView: View {
                         focus.customerID = new.id
                         focus.requestedSection = .customers
                     } label: {
-                        Image(systemName: "person.badge.plus")
+                        Label("New customer", systemImage: "person.badge.plus")
                     }
+                    .labelStyle(.iconOnly)
                     .help("Create a new customer and edit their details")
                 }
 
                 if let customer {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(customer.addressLines.enumerated()), id: \.offset) { _, line in
-                            Text(line).font(.caption).foregroundColor(.secondary)
+                            Text(line).font(.caption).foregroundStyle(.secondary)
                         }
                         if !customer.email.isEmpty {
-                            Text(customer.email).font(.caption).foregroundColor(.secondary)
+                            Text(customer.email).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -414,7 +415,7 @@ struct InvoiceEditorView: View {
             }
             Text(title)
         }
-        .foregroundColor(printed ? .secondary : Color.secondary.opacity(0.5))
+        .foregroundStyle(printed ? .secondary : Color.secondary.opacity(0.5))
         .help(printed ? "" : "Filled in here, left off the printed invoice")
     }
 
@@ -434,17 +435,17 @@ struct InvoiceEditorView: View {
                     .frame(width: 110)
                     Spacer()
                     Text("-" + Fmt.currency(invoice.discountAmount, code: invoice.currencyCode))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 8) {
                     Text("Tax").frame(width: 90, alignment: .leading)
                     TextField("Tax", text: $invoice.taxLabel).frame(width: 90)
                     DecimalField(placeholder: "0", value: $invoice.taxRate).frame(width: 70)
-                    Text("%").foregroundColor(.secondary)
+                    Text("%").foregroundStyle(.secondary)
                     Spacer()
                     Text(Fmt.currency(invoice.taxAmount, code: invoice.currencyCode))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 8) {
@@ -486,7 +487,7 @@ struct InvoiceEditorView: View {
                 HStack {
                     Text("Shown on the invoice under “How to Pay”.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Spacer()
                     Button("Use defaults") {
                         invoice.paymentMethods = business.paymentMethods.map { method in
@@ -581,8 +582,9 @@ struct LineItemRow: View {
                 Button("Remove line", role: .destructive, action: onDelete)
                     .disabled(!canDelete)
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Label("Line actions", systemImage: "ellipsis.circle")
             }
+            .labelStyle(.iconOnly)
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .frame(width: 50)
@@ -645,7 +647,7 @@ struct DocumentPreview: View {
                         if specs.count > 1 {
                             Text("Page \(index + 1) of \(specs.count)")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -665,7 +667,7 @@ struct DocumentPreview: View {
         // Repaginate off the body path, and only once typing settles.
         .task(id: PaginationKey(invoice: invoice, customer: customer, business: business)) {
             if !self.specs.isEmpty {
-                try? await Task.sleep(nanoseconds: 200_000_000)
+                try? await Task.sleep(for: .milliseconds(200))
                 if Task.isCancelled { return }
             }
             self.specs = InvoicePaginator.pages(

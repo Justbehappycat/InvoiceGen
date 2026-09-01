@@ -257,6 +257,28 @@ On first launch the app seeds itself with the business details, logo, payment te
 customer, and invoice #8 from the sample invoice, with the next number set to 9.
 All of it is editable.
 
+## Reviewed against swiftui-pro
+
+The codebase was audited with the [swiftui-pro](https://github.com/twostraws/swiftui-agent-skill)
+agent skill, keeping the rules that apply to a macOS app and checking each
+claimed deprecation against the SDK's `.swiftinterface` rather than taking the
+rule's word for it. Applied: labels on every icon-only control, `foregroundStyle`
+throughout, `clipShape(.rect(cornerRadius:))`, `Task.sleep(for:)`, and
+cancellable `Task` debounces in place of `DispatchWorkItem`.
+
+Deliberately not applied:
+
+- **Dynamic Type in the printed document.** `InvoiceDocumentView` sets fixed
+  point sizes because it renders a 612×792pt US Letter page. Type that reflowed
+  with the reader's accessibility settings would break pagination and the PDF.
+- **One type per file.** `Models.swift` holds one coherent domain.
+- **Extracting every computed `some View` into its own struct.** Style, and it
+  would scatter cohesive sections across dozens of files.
+- **The single-parameter `onChange`.** Genuinely deprecated (macOS 14), but the
+  two-parameter form is macOS 14+ and this package targets macOS 13. It is a
+  deployment-target decision, not a code fix — which is also why the build shows
+  no warning for it.
+
 ## Layout of the code
 
 | File | Purpose |

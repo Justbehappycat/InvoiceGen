@@ -335,18 +335,18 @@ struct PaymentBadge: View {
             Text(preset.monogram)
                 .font(.system(size: size * (preset.monogram.count > 2 ? 0.34 : 0.46),
                               weight: .heavy, design: .rounded))
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
                 .padding(.horizontal, 1)
         } else if let symbol = method.kind.symbolName {
             Image(systemName: symbol)
                 .font(.system(size: size * 0.55, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
         } else {
             Text(method.kind.letter)
                 .font(.system(size: size * 0.62, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
         }
     }
 }

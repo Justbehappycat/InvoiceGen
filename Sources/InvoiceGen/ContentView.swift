@@ -88,7 +88,7 @@ struct InvoiceRow: View {
                     Text("#\(invoice.number)").font(.body.weight(.semibold))
                     Text(customer?.displayName ?? "No customer")
                         .font(.body)
-                        .foregroundColor(customer == nil ? .secondary : .primary)
+                        .foregroundStyle(customer == nil ? .secondary : .primary)
                         .lineLimit(1)
                 }
                 HStack(spacing: 6) {
@@ -102,7 +102,7 @@ struct InvoiceRow: View {
                     }
                 }
                 .font(.caption)
-                .foregroundColor(invoice.isOverdue ? .orange : .secondary)
+                .foregroundStyle(invoice.isOverdue ? .orange : .secondary)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -136,7 +136,7 @@ struct StatusChip: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color.opacity(0.18), in: Capsule())
-            .foregroundColor(color)
+            .foregroundStyle(color)
     }
 }
 
@@ -149,11 +149,11 @@ struct EmptyStateView: View {
         VStack(spacing: 10) {
             Image(systemName: systemImage)
                 .font(.system(size: 40))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             Text(title).font(.title3.weight(.semibold))
             Text(message)
                 .font(.callout)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
         }

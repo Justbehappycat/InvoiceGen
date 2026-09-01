@@ -106,7 +106,7 @@ struct SettingsView: View {
                         } else {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(Color.secondary.opacity(0.15))
-                                .overlay(Text("No logo").font(.caption).foregroundColor(.secondary))
+                                .overlay(Text("No logo").font(.caption).foregroundStyle(.secondary))
                         }
                     }
                     .frame(width: 140, height: 60)
@@ -149,7 +149,7 @@ struct SettingsView: View {
                 ColumnSettingsEditor(columns: business.defaultColumns)
                 Text("New invoices start from these. Any invoice can override them from the Columns button above its items.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(6)
@@ -164,7 +164,7 @@ struct SettingsView: View {
                 PaymentMethodsEditor(methods: business.paymentMethods, showEnableToggles: false)
                 Text("These appear in the invoice's “How to Pay” block. New invoices copy this list; you can then tweak it per invoice.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
             .padding(6)
         } label: {
@@ -182,7 +182,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: store.hasVerificationPassphrase ? "barcode" : "barcode.viewfinder")
-                        .foregroundColor(store.hasVerificationPassphrase ? .green : .secondary)
+                        .foregroundStyle(store.hasVerificationPassphrase ? .green : .secondary)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(store.hasVerificationPassphrase
                              ? "Invoices carry a verification code."
@@ -191,7 +191,7 @@ struct SettingsView: View {
                              + "and total amount. Change any of them and it stops verifying. "
                              + "Same passphrase on another Mac ⇒ same codes.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -222,7 +222,7 @@ struct SettingsView: View {
                             .frame(width: 200)
                         Text(String(format: "%.0f%%", store.data.business.verificationBarTone * 100))
                             .font(.callout.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.leading, 16)
                 } else if store.data.business.verificationMarkStyle == .strip {
@@ -265,7 +265,7 @@ struct SettingsView: View {
                     Text("At least 8 characters. Changing it invalidates the codes on every invoice "
                          + "already sent, so pick one you'll keep.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Button("Unlock to set the passphrase") {
@@ -274,7 +274,7 @@ struct SettingsView: View {
                 }
 
                 if let passphraseNote {
-                    Text(passphraseNote).font(.caption).foregroundColor(.secondary)
+                    Text(passphraseNote).font(.caption).foregroundStyle(.secondary)
                 }
 
                 Divider()
@@ -300,26 +300,26 @@ struct SettingsView: View {
         if store.data.business.verificationMarkStyle == .banner {
             let tone = store.data.business.verificationBarTone
             HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "app.badge.checkmark").foregroundColor(.green)
+                Image(systemName: "app.badge.checkmark").foregroundStyle(.green)
                 Text(String(format: "Stripes at %.0f%% — print contrast %.2f, far under the "
                      + "0.70 a handheld scanner needs, and that's fine: the app reads its own "
                      + "mark by sampling where it knows the stripes are and comparing against "
                      + "the pattern these numbers should produce. Tested down to 2%%. Drop the "
                      + "PDF here to check one.", tone * 100, tone))
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else if store.data.business.verificationMarkStyle == .letters {
             HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "textformat").foregroundColor(.secondary)
+                Image(systemName: "textformat").foregroundStyle(.secondary)
                 Text("The code is cut into the letterforms and nothing extends past them. "
                      + "This is a brand mark, not a scannable symbol — Code 128 needs every "
                      + "column, and the gaps between letters delete some. Verification is "
                      + "unaffected: the code prints in the footer, and dropping the PDF here "
                      + "still checks the page against it.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
@@ -337,7 +337,7 @@ struct SettingsView: View {
         let scannable = contrast >= Verification.minimumContrast
         return HStack(alignment: .top, spacing: 6) {
             Image(systemName: scannable ? "barcode.viewfinder" : "eye")
-                .foregroundColor(scannable ? .green : .secondary)
+                .foregroundStyle(scannable ? .green : .secondary)
             Text(scannable
                  ? "Print contrast \(String(format: "%.2f", contrast)) — above the "
                    + "\(String(format: "%.2f", Verification.minimumContrast)) floor, so a scanner "
@@ -348,7 +348,7 @@ struct SettingsView: View {
                    + "printed in the footer. Switch to ink if you want it scannable — there is no "
                    + "tone in between that passes.")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -366,25 +366,25 @@ struct SettingsView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: store.vaultStatus.isTrouble
                           ? "exclamationmark.triangle.fill" : "lock.shield.fill")
-                        .foregroundColor(store.vaultStatus.isTrouble ? .orange : .green)
+                        .foregroundStyle(store.vaultStatus.isTrouble ? .orange : .green)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(store.secretsLoaded
                              ? store.vaultStatus.message
                              : "Opening the payment vault…")
                         Text("Sealed with AES-GCM under a key in your login Keychain, at \(PaymentVault.shared.vaultURL.lastPathComponent). data.json holds no payment details.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
                 if store.secretsUnprotected {
                     HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Payment details could not be encrypted and are stored in plain text in data.json.")
                             Text("This happens when the Keychain key isn't reachable — usually after the app was rebuilt or re-signed. Repairing makes a new key; anything already in the vault becomes unreadable and has to be re-entered.")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                             Button("Repair encryption key") { store.repairEncryptionKey() }
                         }
                     }
@@ -408,13 +408,13 @@ struct SettingsView: View {
                 Text("Recent changes to payment details").font(.callout.weight(.medium))
                 let log = store.vaultChangeLog.reversed().prefix(6)
                 if log.isEmpty {
-                    Text("No changes recorded yet.").font(.caption).foregroundColor(.secondary)
+                    Text("No changes recorded yet.").font(.caption).foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(log)) { entry in
                         HStack {
                             Text(entry.summary).font(.caption)
                             Spacer()
-                            Text(Fmt.shortDate(entry.date)).font(.caption).foregroundColor(.secondary)
+                            Text(Fmt.shortDate(entry.date)).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -441,7 +441,7 @@ struct SettingsView: View {
                     Text("Payment terms")
                     IntegerField(placeholder: "0", value: business.defaultPaymentTermDays)
                         .frame(width: 50)
-                    Text("days").foregroundColor(.secondary)
+                    Text("days").foregroundStyle(.secondary)
                 }
 
                 Text("Default notes / terms (anything beyond payment details)").font(.callout)
@@ -454,7 +454,7 @@ struct SettingsView: View {
 
                 Text("New invoices start from these values.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
             .padding(6)
         } label: {
@@ -476,14 +476,14 @@ struct SettingsView: View {
                 }
                 Text(store.storageURL.path)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 HStack(spacing: 6) {
                     Text("InvoiceGen")
                     Text(AppVersion.display)
                 }
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 HStack {
                     Button("Reveal data file") {

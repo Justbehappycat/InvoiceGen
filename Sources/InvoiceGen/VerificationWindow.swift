@@ -16,7 +16,7 @@ struct VerifyInvoiceView: View {
             Text("Scan the barcode on the printed invoice, or type the code beneath it. "
                  + "A handheld scanner types into this field like a keyboard.")
                 .font(.callout)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
@@ -40,7 +40,7 @@ struct VerifyInvoiceView: View {
                 Text("Checks the file itself: reads the bars, then re-reads the numbers "
                      + "printed on the page and recomputes the signature from those.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -103,13 +103,13 @@ struct VerifyInvoiceView: View {
 
     private func panel(icon: String, tint: Color, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).foregroundColor(tint).font(.title2)
+            Image(systemName: icon).foregroundStyle(tint).font(.title2)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.headline)
                 if !detail.isEmpty {
                     Text(detail)
                         .font(.callout)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -117,7 +117,7 @@ struct VerifyInvoiceView: View {
         }
         .padding(12)
         .background(tint.opacity(0.08))
-        .cornerRadius(8)
+        .clipShape(.rect(cornerRadius: 8))
     }
 
     private func verify() {
@@ -194,10 +194,10 @@ struct VerifyInvoiceView: View {
                 }
             }
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
 
             ForEach(report.notes, id: \.self) { note in
-                Text(note).font(.caption).foregroundColor(.secondary)
+                Text(note).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

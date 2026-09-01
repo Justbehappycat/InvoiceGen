@@ -33,14 +33,14 @@ final class AppStore: ObservableObject {
     private var undoStack: [AppData] = []
     private var redoStack: [AppData] = []
     private var pendingBaseline: AppData?
-    private var historyWorkItem: DispatchWorkItem?
+    private var historyTask: Task<Void, Never>?
     private var isApplyingHistory = false
     private var isSeeded = false
     private var needsSaveAfterSecrets = false
     private let historyLimit = 60
 
     private let fileURL: URL
-    private var saveWorkItem: DispatchWorkItem?
+    private var saveTask: Task<Void, Never>?
 
     static let shared = AppStore()
 
@@ -215,16 +215,21 @@ final class AppStore: ObservableObject {
         guard !isApplyingHistory, previous != data else { return }
         if pendingBaseline == nil { pendingBaseline = previous }
 
-        historyWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.commitHistory() }
-        historyWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
+        // A cancellable Task *is* the debounce: reassigning cancels the last
+        // one, and the sleep throws on cancellation, so the burst collapses
+        // into a single step without a work item to juggle.
+        historyTask?.cancel()
+        historyTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.commitHistory()
+        }
     }
 
     /// Ends the current burst of edits so the next change starts a new step.
     func commitHistory() {
-        historyWorkItem?.cancel()
-        historyWorkItem = nil
+        historyTask?.cancel()
+        historyTask = nil
         guard let baseline = pendingBaseline else { return }
         pendingBaseline = nil
         guard baseline != data else { return }
@@ -264,10 +269,12 @@ final class AppStore: ObservableObject {
     }
 
     private func scheduleSave() {
-        saveWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.saveNow() }
-        saveWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: item)
+        saveTask?.cancel()
+        saveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            self?.saveNow()
+        }
     }
 
     func saveNow() {

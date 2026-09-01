@@ -77,12 +77,12 @@ struct CustomerDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         let invoices = store.invoices(for: customer.id)
                         if invoices.isEmpty {
-                            Text("No invoices yet.").foregroundColor(.secondary)
+                            Text("No invoices yet.").foregroundStyle(.secondary)
                         } else {
                             ForEach(invoices) { invoice in
                                 HStack {
                                     Text("#\(invoice.number)").frame(width: 60, alignment: .leading)
-                                    Text(Fmt.shortDate(invoice.issueDate)).foregroundColor(.secondary)
+                                    Text(Fmt.shortDate(invoice.issueDate)).foregroundStyle(.secondary)
                                     Spacer()
                                     StatusChip(status: invoice.status, overdue: invoice.isOverdue)
                                     Text(Fmt.currency(invoice.total, code: invoice.currencyCode))

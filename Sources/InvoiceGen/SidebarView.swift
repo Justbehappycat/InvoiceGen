@@ -75,7 +75,7 @@ struct SidebarView: View {
                 )
             }
             .buttonStyle(.borderless)
-            .foregroundColor(section == .items ? .accentColor : .primary)
+            .foregroundStyle(section == .items ? Color.accentColor : Color.primary)
             .help("Reusable services, prices and invoice templates")
 
             Spacer()
@@ -270,7 +270,7 @@ struct SidebarView: View {
                         store.emptyTrash()
                     }
                     .buttonStyle(.borderless)
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
                 }
 
                 if scope == .trash {
@@ -319,7 +319,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Outstanding")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Text(Fmt.currency(outstanding, code: store.data.business.currencyCode))
                     .font(.callout.weight(.semibold))
             }
@@ -327,7 +327,7 @@ struct SidebarView: View {
             if overdue > 0 {
                 Text("\(overdue) overdue")
                     .font(.caption.weight(.semibold))
-                    .foregroundColor(.orange)
+                    .foregroundStyle(.orange)
             }
         }
         .padding(.horizontal, 12)
@@ -350,7 +350,7 @@ struct SidebarView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(customer.displayName).font(.body)
                         if !customer.email.isEmpty {
-                            Text(customer.email).font(.caption).foregroundColor(.secondary)
+                            Text(customer.email).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 2)
