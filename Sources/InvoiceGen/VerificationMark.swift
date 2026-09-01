@@ -28,7 +28,7 @@ struct VerificationMark: View {
     /// >1 holds the letters solid for longer before they open up. At 1.0 the
     /// taper starts eating the letters immediately and INVOICE stops reading.
     var gamma: CGFloat = 1.4
-    var strip: CGFloat = 22
+    var strip: CGFloat = 18
     /// How far the bar columns rise out of the strip and into the word, as a
     /// fraction of the fade height.
     ///
@@ -38,7 +38,11 @@ struct VerificationMark: View {
     /// every column across the join — gap meets gap, bar meets bar — and ramp
     /// from the strip's tone to the letters' ink so the colour doesn't step
     /// either.
-    var riser: CGFloat = 0.30
+    var riser: CGFloat = 0.45
+    /// How far the foot of the bars melts back into the surface, in points.
+    /// Without it the mark ends on a ruled edge and reads as a word sitting on
+    /// a plinth; with it the object simply stops.
+    var meltFoot: CGFloat = 8
 
     private var font: NSFont { .systemFont(ofSize: fontSize, weight: .medium) }
     private var capHeight: CGFloat { font.capHeight }
@@ -60,9 +64,28 @@ struct VerificationMark: View {
             guard let glyphs = word.path.copy(using: &flip) else { return }
             let letters = Path(glyphs)
 
-            context.fill(letters, with: .color(ink))
+            // ONE path for the whole mark — letters, risers and strip in a
+            // single body — filled from ONE gradient. No part of the object
+            // carries a tone of its own, which is what stops it reading as a
+            // word parked on top of a barcode.
+            let riserHeight = fadeHeight * riser
+            var body = letters
+            for (index, isBar) in modules.enumerated() where isBar {
+                body.addRect(CGRect(x: CGFloat(index) * moduleWidth,
+                                    y: baselineY - riserHeight,
+                                    width: moduleWidth,
+                                    height: riserHeight + strip))
+            }
+            context.fill(
+                body,
+                with: .linearGradient(
+                    Gradient(colors: [ink, stripTone]),
+                    startPoint: CGPoint(x: 0, y: 0),
+                    endPoint: CGPoint(x: 0, y: baselineY + strip)
+                )
+            )
 
-            // The dissolve, clipped to the letters.
+            // The dissolve, cut back out of the letters.
             context.drawLayer { layer in
                 layer.clip(to: letters)
                 for (index, isBar) in modules.enumerated() where !isBar {
@@ -74,34 +97,19 @@ struct VerificationMark: View {
                 }
             }
 
-            // Risers: every bar column continues up across the seam, tone
-            // ramping from the strip to the ink. Drawn over the letters' feet,
-            // never clipped to them — that's the whole point.
-            if riser > 0 {
-                let riserHeight = fadeHeight * riser
-                let bands = 24
-                let from = NSColor(stripTone)
-                let to = NSColor(ink)
-                for band in 0..<bands {
-                    let t = CGFloat(band) / CGFloat(bands - 1)
-                    let tone = from.blended(withFraction: t, of: to) ?? to
-                    let y = baselineY - (t + 1 / CGFloat(bands)) * riserHeight
-                    for (index, isBar) in modules.enumerated() where isBar {
-                        let rect = CGRect(x: CGFloat(index) * moduleWidth, y: y,
-                                          width: moduleWidth,
-                                          height: riserHeight / CGFloat(bands) + 0.4)
-                        context.fill(Path(rect), with: .color(Color(nsColor: tone)))
-                    }
-                }
-            }
-
-            // The same columns, continuing below the baseline.
-            if strip > 0 {
-                for (index, isBar) in modules.enumerated() where isBar {
-                    let rect = CGRect(x: CGFloat(index) * moduleWidth, y: baselineY,
-                                      width: moduleWidth, height: strip)
-                    context.fill(Path(rect), with: .color(stripTone))
-                }
+            // The foot melts back into the surface, so the mark has no ruled
+            // bottom edge to give away where it was pasted on.
+            if meltFoot > 0 {
+                let foot = CGRect(x: -1, y: baselineY + strip - meltFoot,
+                                  width: word.width + 2, height: meltFoot + 1)
+                context.fill(
+                    Path(foot),
+                    with: .linearGradient(
+                        Gradient(colors: [field.opacity(0), field]),
+                        startPoint: CGPoint(x: 0, y: foot.minY),
+                        endPoint: CGPoint(x: 0, y: foot.maxY)
+                    )
+                )
             }
         }
         .frame(width: width, height: height)

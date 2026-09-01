@@ -56,6 +56,11 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   resolving into the code. Drawn as vector paths, so it stays crisp at any
   print resolution. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
   quietly in the footer.
+- The whole mark is **one path filled from one gradient** — letters, risers and
+  strip in a single body, so no part of it carries a tone of its own. That is
+  what stops it reading as a word parked on top of a barcode. The foot melts
+  back into the surface too, so there's no ruled bottom edge to give away where
+  it was pasted on.
 - Every bar column *rises* out of the strip and across the baseline, ramping
   in tone from the strip to the letters' ink. Without that the join doesn't
   stitch: the strip carries a bar in every column, but above the baseline only
