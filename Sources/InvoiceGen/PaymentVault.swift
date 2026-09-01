@@ -17,9 +17,28 @@ struct VaultContents: Codable, Equatable {
     var invoiceMethods: [String: [PaymentMethod]] = [:]
     var templateMethods: [String: [PaymentMethod]] = [:]
     var changeLog: [VaultChange] = []
+    /// The verification passphrase: a secret, so it sits beside the payment
+    /// details rather than in data.json.
+    var verificationPassphrase: String = ""
 
     var isEmpty: Bool {
         businessMethods.isEmpty && invoiceMethods.isEmpty && templateMethods.isEmpty
+            && verificationPassphrase.isEmpty
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case businessMethods, invoiceMethods, templateMethods, changeLog, verificationPassphrase
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        businessMethods = try c.decodeIfPresent([PaymentMethod].self, forKey: .businessMethods) ?? []
+        invoiceMethods = try c.decodeIfPresent([String: [PaymentMethod]].self, forKey: .invoiceMethods) ?? [:]
+        templateMethods = try c.decodeIfPresent([String: [PaymentMethod]].self, forKey: .templateMethods) ?? [:]
+        changeLog = try c.decodeIfPresent([VaultChange].self, forKey: .changeLog) ?? []
+        verificationPassphrase = try c.decodeIfPresent(String.self, forKey: .verificationPassphrase) ?? ""
     }
 }
 

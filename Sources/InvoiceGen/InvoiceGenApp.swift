@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import PDFKit
+import Vision
 
 /// Headless flags render straight after launch, when the vault is still
 /// opening in the background — they have to wait for it or they would print an
@@ -337,6 +338,132 @@ struct InvoiceGenApp: App {
             vault.reset()
             exit(0)
         }
+        // Renders a sheet from invented data — no customer, business or payment
+        // details of yours — so layout changes can be shown and reviewed safely.
+        if let index = args.firstIndex(of: "--render-mock"), index + 1 < args.count {
+            _ = NSApplication.shared
+            var business = BusinessProfile()
+            business.name = "Northwind Studio LLC"
+            business.addressLine1 = "1200 Alder Street"
+            business.city = "Portland"
+            business.region = "OR"
+            business.postalCode = "97205"
+            business.country = "United States"
+            business.phone = "(555) 010-4477"
+            business.email = "billing@example.com"
+            business.website = "example.com"
+            business.verificationSalt = Data(repeating: 0x2A, count: 16)
+            business.verificationPassphrase = "sample passphrase"
+
+            var customer = Customer()
+            customer.name = "Harbour Coffee Roasters"
+            customer.contactName = "Attn: Accounts Payable"
+            customer.addressLine1 = "418 Pike Street"
+            customer.city = "Seattle"
+            customer.region = "WA"
+            customer.postalCode = "98101"
+            customer.email = "ap@example.com"
+
+            var invoice = Invoice()
+            invoice.number = "11"
+            invoice.poNumber = "HCR-2291"
+            invoice.items = [
+                LineItem(title: "Brand film — 90 second cut",
+                         details: "Two rounds of revisions, colour grade, mix", quantity: 1, price: 4200),
+                LineItem(title: "Social cutdowns", details: "6 × 15s vertical, captioned",
+                         quantity: 6, price: 180),
+                LineItem(title: "Studio day rate", details: "Crew of three, lighting package",
+                         quantity: 2, price: 1400),
+            ]
+            invoice.amountPaid = 2000
+            invoice.notes = "Payment due within 30 days of the invoice date."
+            invoice.footerMessage = "It was a pleasure working with you!"
+            var zelle = PaymentMethod.make(.zelle)
+            zelle.set("Zelle ID (email or phone)", "payments@example.com")
+            var bank = PaymentMethod.make(.bank)
+            bank.title = "Placeholder Bank"
+            bank.set("Account number", "•••• •••• 4412")
+            invoice.paymentMethods = [zelle, bank]
+
+            if let data = MainActor.assumeIsolated({
+                PDFExporter.makePDFData(invoice: invoice, customer: customer, business: business)
+            }) {
+                try? data.write(to: URL(fileURLWithPath: args[index + 1]))
+                MainActor.assumeIsolated {
+                    if let key = Verification.cachedKey(passphrase: business.verificationPassphrase,
+                                                        salt: business.verificationSalt) {
+                        print("mock code:", Verification.code(for: invoice, key: key))
+                    }
+                }
+                exit(0)
+            }
+            exit(1)
+        }
+        if args.contains("--selftest-verify") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            _ = NSApplication.shared
+            MainActor.assumeIsolated {
+                let salt = Verification.newSalt()
+                guard let key = Verification.deriveKey(passphrase: "correct horse battery", salt: salt),
+                      let other = Verification.deriveKey(passphrase: "wrong horse battery", salt: salt)
+                else { print("key derivation FAILED"); exit(1) }
+
+                var invoice = Invoice()
+                invoice.number = "11"
+                invoice.issueDate = Date()
+                invoice.items = [
+                    LineItem(title: "Edit", details: "", quantity: 2, price: 150),
+                    LineItem(title: "Grade", details: "", quantity: 1, price: 100),
+                ]
+                var data = AppData()
+                data.invoices = [invoice]
+
+                let code = Verification.code(for: invoice, key: key)
+                print("payload:", Verification.payload(for: invoice))
+                print("code:", code)
+                print("verifies:", Verification.verify(code, in: data, key: key).isValid ? "yes" : "NO — FAILED")
+
+                // Every signed field must actually change the code.
+                for (label, mutate) in [
+                    ("total amount", { (i: inout Invoice) in i.items[0].price += 1 }),
+                    ("quantity", { (i: inout Invoice) in i.items[0].quantity += 1 }),
+                    ("date", { (i: inout Invoice) in i.issueDate = i.issueDate.addingTimeInterval(86400) }),
+                    ("number", { (i: inout Invoice) in i.number = "12" }),
+                ] {
+                    var tampered = invoice
+                    mutate(&tampered)
+                    var tamperedData = AppData()
+                    tamperedData.invoices = [tampered]
+                    let result = Verification.verify(code, in: tamperedData, key: key)
+                    print("  changed \(label) ->", result.isValid ? "STILL VALID — FAILED" : "rejected")
+                }
+
+                print("wrong passphrase:",
+                      Verification.verify(code, in: data, key: other).isValid ? "ACCEPTED — FAILED" : "rejected")
+                print("garbage input:",
+                      Verification.verify("hello", in: data, key: key) == .malformed ? "malformed" : "FAILED")
+                print("no passphrase:",
+                      Verification.verify(code, in: data, key: nil) == .noPassphrase ? "reported" : "FAILED")
+
+                // Same passphrase + same salt on another Mac ⇒ same code.
+                let elsewhere = Verification.deriveKey(passphrase: "correct horse battery", salt: salt)!
+                print("reproducible elsewhere:",
+                      Verification.code(for: invoice, key: elsewhere) == code ? "yes" : "NO — FAILED")
+
+                // The bars actually encode the code, and scan back.
+                if let image = Verification.cachedBarcode(for: code),
+                   let tiff = image.tiffRepresentation,
+                   let bitmap = NSBitmapImageRep(data: tiff), let cg = bitmap.cgImage {
+                    let request = VNDetectBarcodesRequest()
+                    try? VNImageRequestHandler(cgImage: cg).perform([request])
+                    let decoded = (request.results ?? []).compactMap { $0.payloadStringValue }
+                    print("barcode round-trip:", decoded.first == code ? "scans back to the code" : "FAILED \(decoded)")
+                } else {
+                    print("barcode round-trip: FAILED to render")
+                }
+            }
+            exit(0)
+        }
         if args.contains("--selftest-list") {
             setvbuf(stdout, nil, _IONBF, 0)
             _ = NSApplication.shared
@@ -592,6 +719,13 @@ struct InvoiceGenApp: App {
                     focus.customerID = customer.id
                     focus.requestedSection = .customers
                 } .keyboardShortcut("n", modifiers: [.command, .shift])
+            }
+
+            CommandGroup(after: .toolbar) {
+                Button("Verify Invoice…") {
+                    VerifyWindowController.shared.show(store: store)
+                }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .saveItem) {

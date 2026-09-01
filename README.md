@@ -47,6 +47,23 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   across a page break, continuation pages repeat the column headers, and pages
   are filled with rows before the totals block moves to a sheet of its own.
 
+**Invoice verification**
+- Every invoice can carry a Code 128 barcode plus the same code in text
+  (`IG1-11-0BEDBC09`), printed on a light plate inside the banner so a scanner
+  can actually read it.
+- The code is an HMAC-SHA256 signature over exactly four fields: invoice
+  number, invoice date, total quantity, total amount. Change any one of them
+  and the code stops verifying.
+- The key is derived from a passphrase you set (Settings ▸ Security ▸ Invoice
+  verification, behind the same Touch ID gate as payment details) with PBKDF2
+  at 200,000 rounds. The passphrase lives in the encrypted vault; the salt
+  lives in `data.json`, so restoring a backup on another Mac and typing the
+  same passphrase reproduces every past code.
+- Verify with ⇧⌘V: scan the barcode (a handheld scanner types like a keyboard)
+  or type the code. The app recomputes the signature from its own copy and
+  reports genuine, mismatched, unknown, or malformed.
+- Changing the passphrase invalidates the codes on invoices already sent.
+
 **Payment methods**
 - Structured, not a notes blob: each method has a badge, a label, and label/value
   fields (Zelle ID, account number, routing number, handle, …).
@@ -165,6 +182,11 @@ And for checking layout at a given window size (writes a PNG of the real UI):
 ```
 
 The last argument is `invoices`, `customers`, `items`, `settings`, or `sidebar`.
+`--selftest-verify` checks the signature end to end: that each signed field
+changes the code, that a wrong passphrase is rejected, that the same passphrase
+and salt reproduce a code on another Mac, and that the rendered bars scan back
+to the code they encode. `--render-mock out.pdf` renders a sheet from invented
+data (no real customer, business or payment details) for reviewing layout.
 `--selftest-list` checks the sidebar ordering, the mark-as-paid gesture and its
 undo, and the payment-term arithmetic behind the Today button.
 `--selftest-columns [out.pdf]` renders the invoice with renamed and hidden

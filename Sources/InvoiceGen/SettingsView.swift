@@ -16,6 +16,7 @@ struct SettingsView: View {
                     identity
                     branding
                     columns
+                    verification
                     payments
                     security
                     defaults
@@ -169,6 +170,92 @@ struct SettingsView: View {
         } label: {
             Text("Payment methods").font(.headline)
         }
+    }
+
+    @State private var passphrase = ""
+    @State private var passphraseConfirm = ""
+    @State private var passphraseNote: String?
+    @ObservedObject private var lock = PaymentLock.shared
+
+    private var verification: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: store.hasVerificationPassphrase ? "barcode" : "barcode.viewfinder")
+                        .foregroundColor(store.hasVerificationPassphrase ? .green : .secondary)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(store.hasVerificationPassphrase
+                             ? "Invoices carry a verification code."
+                             : "No passphrase set — invoices print without a code.")
+                        Text("The code is a signature over the invoice number, date, total quantity "
+                             + "and total amount. Change any of them and it stops verifying. "
+                             + "Same passphrase on another Mac ⇒ same codes.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Toggle("Print the barcode on invoices", isOn: business.printVerificationCode)
+                    .disabled(!store.hasVerificationPassphrase)
+
+                if lock.isUnlocked {
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            Text(store.hasVerificationPassphrase ? "New passphrase" : "Passphrase")
+                            SecureField("", text: $passphrase).frame(width: 220)
+                        }
+                        GridRow {
+                            Text("Confirm")
+                            SecureField("", text: $passphraseConfirm).frame(width: 220)
+                        }
+                    }
+                    HStack(spacing: 10) {
+                        Button(store.hasVerificationPassphrase ? "Change passphrase" : "Set passphrase") {
+                            savePassphrase()
+                        }
+                        .disabled(passphrase.count < 8 || passphrase != passphraseConfirm)
+                        if store.hasVerificationPassphrase {
+                            Button("Copy current passphrase") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(
+                                    store.data.business.verificationPassphrase, forType: .string
+                                )
+                                passphraseNote = "Copied to the clipboard — paste it somewhere safe."
+                            }
+                        }
+                    }
+                    Text("At least 8 characters. Changing it invalidates the codes on every invoice "
+                         + "already sent, so pick one you'll keep.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Button("Unlock to set the passphrase") {
+                        lock.unlock(reason: "set the invoice verification passphrase")
+                    }
+                }
+
+                if let passphraseNote {
+                    Text(passphraseNote).font(.caption).foregroundColor(.secondary)
+                }
+
+                Divider()
+                Button("Verify an invoice…") {
+                    VerifyWindowController.shared.show(store: store)
+                }
+            }
+            .padding(6)
+        } label: {
+            Text("Invoice verification").font(.headline)
+        }
+    }
+
+    private func savePassphrase() {
+        store.setVerificationPassphrase(passphrase)
+        passphraseNote = "Saved. New invoices will carry a code."
+        passphrase = ""
+        passphraseConfirm = ""
     }
 
     private var security: some View {

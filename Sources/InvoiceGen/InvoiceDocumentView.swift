@@ -31,6 +31,19 @@ struct InvoiceDocumentView: View {
     private var accentDark: Color { accent.adjustingBrightness(0.78) }
     private var currency: String { invoice.currencyCode }
 
+    /// The signature printed on the sheet, when a passphrase is set and the
+    /// business hasn't switched it off. Derived from the business profile the
+    /// view already holds, so pagination measures the real thing.
+    private var verificationCode: String? {
+        guard business.printVerificationCode,
+              let key = Verification.cachedKey(
+                  passphrase: business.verificationPassphrase,
+                  salt: business.verificationSalt
+              )
+        else { return nil }
+        return Verification.code(for: invoice, key: key)
+    }
+
     private var pageItems: ArraySlice<LineItem> {
         let lower = min(max(0, page.start), invoice.items.count)
         let upper = min(max(lower, page.end), invoice.items.count)
@@ -93,8 +106,16 @@ struct InvoiceDocumentView: View {
         switch business.templateStyle {
         case .banner:
             HStack(spacing: 0) {
-                VStack(alignment: .leading) {
-                    Spacer()
+                VStack(alignment: .leading, spacing: 0) {
+                    if let verificationCode {
+                        // The bars need a light field and a quiet zone to
+                        // scan, so they sit on a paper strip inside the banner
+                        // rather than over the accent colour.
+                        barcodeStrip(verificationCode)
+                            .padding(.leading, 44)
+                            .padding(.top, 12)
+                    }
+                    Spacer(minLength: 0)
                     Text(invoice.title.isEmpty ? "INVOICE" : invoice.title)
                         .font(.system(size: 30, weight: .regular))
                         .foregroundColor(.white)
@@ -145,10 +166,41 @@ struct InvoiceDocumentView: View {
                     }
                 }
                 Rectangle().fill(accent).frame(height: 3)
+                if let verificationCode {
+                    barcodeStrip(verificationCode).padding(.top, 8)
+                }
             }
             .padding(.horizontal, 44)
             .padding(.top, 40)
         }
+    }
+
+    /// Code 128 bars plus the same code in text, so an invoice can be checked
+    /// with a scanner or read down a phone line.
+    private func barcodeStrip(_ code: String) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            if let image = Verification.cachedBarcode(for: code) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.none)          // never blur a barcode
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 26)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("VERIFICATION")
+                    .font(.system(size: 6))
+                    .tracking(0.6)
+                    .foregroundColor(Color(white: 0.45))
+                Text(code)
+                    .font(.system(size: 8.5, design: .monospaced))
+                    .foregroundColor(.black)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.white)
+        .cornerRadius(3)
+        .fixedSize()   // a plate that hugs the bars, not a full-width band
     }
 
     private var continuationHeader: some View {

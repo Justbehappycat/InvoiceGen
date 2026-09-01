@@ -24,12 +24,20 @@ struct BusinessProfile: Codable, Hashable {
     var paymentMethods: [PaymentMethod] = []
     var defaultColumns: InvoiceColumns = InvoiceColumns()
 
+    /// Verification: the passphrase is a secret and lives in the vault, never
+    /// in data.json. The salt is not secret and must survive a backup restore,
+    /// so it stays in the file — without it the same passphrase would derive a
+    /// different key and every past code would stop verifying.
+    var verificationPassphrase: String = ""
+    var verificationSalt: Data = Data()
+    var printVerificationCode: Bool = true
+
     // Tolerant decoding: older data files simply lack the newer keys.
     enum CodingKeys: String, CodingKey {
         case name, addressLine1, city, region, postalCode, country, phone, website, email
         case logoData, currencyCode, accentHex, templateStyle
         case defaultPaymentTermDays, defaultNotes, defaultFooterMessage, paymentMethods
-        case defaultColumns
+        case defaultColumns, verificationPassphrase, verificationSalt, printVerificationCode
     }
 
     init() {}
@@ -57,6 +65,9 @@ struct BusinessProfile: Codable, Hashable {
         paymentMethods = try c.decodeIfPresent([PaymentMethod].self, forKey: .paymentMethods) ?? []
         defaultColumns = try c.decodeIfPresent(InvoiceColumns.self, forKey: .defaultColumns)
             ?? InvoiceColumns()
+        verificationPassphrase = try c.decodeIfPresent(String.self, forKey: .verificationPassphrase) ?? ""
+        verificationSalt = try c.decodeIfPresent(Data.self, forKey: .verificationSalt) ?? Data()
+        printVerificationCode = try c.decodeIfPresent(Bool.self, forKey: .printVerificationCode) ?? true
     }
 
     var addressLines: [String] {

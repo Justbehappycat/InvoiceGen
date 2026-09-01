@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CryptoKit
 
 /// Everything lives in a single JSON file on disk. No network, no accounts.
 final class AppStore: ObservableObject {
@@ -120,6 +121,7 @@ final class AppStore: ObservableObject {
         }
 
         if !vault.isEmpty {
+            data.business.verificationPassphrase = vault.verificationPassphrase
             data.business.paymentMethods = vault.businessMethods
             for index in data.invoices.indices {
                 if let methods = vault.invoiceMethods[data.invoices[index].id.uuidString] {
@@ -297,6 +299,7 @@ final class AppStore: ObservableObject {
     private func secretsFromCurrentData() -> VaultContents {
         var contents = VaultContents()
         contents.businessMethods = data.business.paymentMethods
+        contents.verificationPassphrase = data.business.verificationPassphrase
         for invoice in data.invoices where !invoice.paymentMethods.isEmpty {
             contents.invoiceMethods[invoice.id.uuidString] = invoice.paymentMethods
         }
@@ -310,6 +313,7 @@ final class AppStore: ObservableObject {
     func scrubbedForDisk() -> AppData {
         var copy = data
         copy.business.paymentMethods = []
+        copy.business.verificationPassphrase = ""   // the salt stays; the secret doesn't
         for index in copy.invoices.indices { copy.invoices[index].paymentMethods = [] }
         for index in copy.templates.indices { copy.templates[index].paymentMethods = [] }
         return copy
@@ -429,6 +433,49 @@ final class AppStore: ObservableObject {
             data.invoices[index].amountPaid = data.invoices[index].total
         }
         commitHistory()
+    }
+
+    // MARK: - Verification
+
+    /// Derived once per passphrase change — PBKDF2 at 200k iterations is slow
+    /// by design, and the printed sheet re-derives nothing.
+    private var cachedVerificationKey: (passphrase: String, salt: Data, key: SymmetricKey)?
+
+    var hasVerificationPassphrase: Bool { !data.business.verificationPassphrase.isEmpty }
+
+    var verificationKey: SymmetricKey? {
+        let passphrase = data.business.verificationPassphrase
+        let salt = data.business.verificationSalt
+        guard !passphrase.isEmpty, !salt.isEmpty else { return nil }
+        if let cached = cachedVerificationKey,
+           cached.passphrase == passphrase, cached.salt == salt {
+            return cached.key
+        }
+        guard let key = Verification.deriveKey(passphrase: passphrase, salt: salt) else { return nil }
+        cachedVerificationKey = (passphrase, salt, key)
+        return key
+    }
+
+    /// The salt is generated once and then never changes: rotating it would
+    /// invalidate the code on every invoice already sent.
+    func setVerificationPassphrase(_ passphrase: String) {
+        commitHistory()
+        if data.business.verificationSalt.isEmpty {
+            data.business.verificationSalt = Verification.newSalt()
+        }
+        data.business.verificationPassphrase = passphrase
+        cachedVerificationKey = nil
+        commitHistory()
+        saveNow()
+    }
+
+    func verificationCode(for invoice: Invoice) -> String? {
+        guard let key = verificationKey else { return nil }
+        return Verification.code(for: invoice, key: key)
+    }
+
+    func verify(_ scanned: String) -> Verification.Result {
+        Verification.verify(scanned, in: data, key: verificationKey)
     }
 
     func deleteInvoice(id: UUID) {
