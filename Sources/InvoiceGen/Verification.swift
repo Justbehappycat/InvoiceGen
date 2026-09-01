@@ -250,8 +250,8 @@ enum Verification {
     /// The drawer and the reader both use this — if they ever disagree, the
     /// mark stops verifying, so there is exactly one definition.
     enum BannerStripes {
-        static let x: CGFloat = 44
-        static let width: CGFloat = 320
+        static let x: CGFloat = 8
+        static let width: CGFloat = 384
         static let top: CGFloat = 8
         static let bottom: CGFloat = 110
         /// Rows to sample: above the title and below it. The title occupies
