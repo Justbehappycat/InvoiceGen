@@ -48,18 +48,31 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   are filled with rows before the totals block moves to a sheet of its own.
 
 **Invoice verification**
-- Every invoice can carry a Code 128 barcode. The bars print *in* the banner
-  colour — ink bars with transparent spaces, so the invoice's own field is the
-  light half of the symbol and the code reads as part of the design rather than
-  a sticker on top of it. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
+- The invoice title *is* the mark: solid at the top, combing open into the
+  verification code at its foot, with the same columns continuing below the
+  baseline as a strip. The cuts sit exactly on the pattern's *space* columns,
+  so the ink still standing at the bottom of the letters is the bar pattern —
+  the strip isn't a second object parked underneath, it's the letters
+  resolving into the code. Drawn as vector paths, so it stays crisp at any
+  print resolution. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
   quietly in the footer.
-- Whether bars can sit straight on a colour is a print question, so the app
-  measures print contrast signal — `(light − dark) / light`, the barcode
-  standards' own metric — against a 0.70 floor. Light and mid accents take the
-  bars directly; a genuinely dark accent gets a lighter band of the same colour
-  behind them, and Settings says which happened and at what contrast. (Vision
-  is not the arbiter here: it will decode black bars on a near-black field that
-  no laser scanner could read.)
+- The dissolve holds the letters solid through the upper two-thirds (gamma
+  1.4) before opening up. A linear taper eats the letters too early and the
+  title stops reading; a cut wider than a stroke deletes the letter outright,
+  which is why cut width is tied to the module grid rather than chosen by eye.
+- The strip has two tones, and the choice is binary because print contrast
+  says so. **Quiet** (a shade of the banner colour) scores PCS 0.22 against the
+  0.70 floor: it looks like part of the design and does *not* scan off a
+  printed page. **Ink** scores 0.85 and does. There is no tone in between that
+  passes, so Settings offers the two and states plainly what each costs.
+- A quiet strip does not cost you verification: the PDF check falls back to the
+  code printed in the footer, and still returns a genuine/tampered verdict.
+  Confirmed by `--selftest-mark`.
+- Print contrast signal — `(light − dark) / light` — is the barcode standards'
+  own metric, and it's what the app measures. Vision is not the arbiter: it
+  will decode black bars on a near-black field that no laser scanner could
+  read, and it decoded a quiet strip in a clean digital render that then failed
+  off the rendered page.
 - The code is an HMAC-SHA256 signature over exactly four fields: invoice
   number, invoice date, total quantity, total amount. Change any one of them
   and the code stops verifying.
@@ -185,6 +198,7 @@ All of it is editable.
 | `PDFExport.swift` | Vector PDF generation, save panel, printing |
 | `SidebarView.swift` | Invoice/customer lists and section switcher |
 | `InvoiceColumns.swift` | Line item column titles, visibility, shared editor |
+| `VerificationMark.swift` | The title dissolving into its verification code |
 | `PaymentMethod.swift` | Payment method model, kinds and badge |
 | `PaymentMethodsEditor.swift` | Shared editor for defaults and per-invoice |
 | `UIShot.swift` | Offscreen UI capture used to check layout |
@@ -202,6 +216,9 @@ And for checking layout at a given window size (writes a PNG of the real UI):
 ```
 
 The last argument is `invoices`, `customers`, `items`, `settings`, or `sidebar`.
+`--selftest-mark` renders the title-mark in both strip tones and checks the
+lot: the contrast of each, that ink decodes off the page and quiet doesn't,
+that the footer code is readable either way, and that both still verify.
 `--selftest-pdf` renders three sheets and checks the real attack: an intact PDF
 verifies, a PDF whose total was edited while keeping the original barcode is
 caught as tampered, an intact PDF whose invoice was edited afterwards is

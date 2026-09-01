@@ -31,6 +31,10 @@ struct BusinessProfile: Codable, Hashable {
     var verificationPassphrase: String = ""
     var verificationSalt: Data = Data()
     var printVerificationCode: Bool = true
+    /// The strip under the title. Quiet matches the banner and is the nicer
+    /// object; ink is the one a laser scanner can actually read. There is no
+    /// middle: print contrast fails everywhere between them.
+    var verificationStripInk: Bool = false
 
     // Tolerant decoding: older data files simply lack the newer keys.
     enum CodingKeys: String, CodingKey {
@@ -38,6 +42,7 @@ struct BusinessProfile: Codable, Hashable {
         case logoData, currencyCode, accentHex, templateStyle
         case defaultPaymentTermDays, defaultNotes, defaultFooterMessage, paymentMethods
         case defaultColumns, verificationPassphrase, verificationSalt, printVerificationCode
+        case verificationStripInk
     }
 
     init() {}
@@ -68,6 +73,7 @@ struct BusinessProfile: Codable, Hashable {
         verificationPassphrase = try c.decodeIfPresent(String.self, forKey: .verificationPassphrase) ?? ""
         verificationSalt = try c.decodeIfPresent(Data.self, forKey: .verificationSalt) ?? Data()
         printVerificationCode = try c.decodeIfPresent(Bool.self, forKey: .printVerificationCode) ?? true
+        verificationStripInk = try c.decodeIfPresent(Bool.self, forKey: .verificationStripInk) ?? false
     }
 
     var addressLines: [String] {

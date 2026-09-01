@@ -46,6 +46,7 @@ enum Verification {
     private static let cacheLock = NSLock()
     private static var keyCache: [String: SymmetricKey] = [:]
     private static var imageCache: [String: NSImage] = [:]
+    private static var columnCache: [String: [Bool]] = [:]
 
     static func cachedKey(passphrase: String, salt: Data) -> SymmetricKey? {
         guard !passphrase.isEmpty, !salt.isEmpty else { return nil }
@@ -207,6 +208,31 @@ enum Verification {
         return image
     }
 
+    /// The symbol as one bool per module column, true = bar. Used by the
+    /// drawn mark, which needs the pattern itself rather than an image of it.
+    static func moduleColumns(for code: String) -> [Bool] {
+        cacheLock.lock()
+        if let cached = columnCache[code] { cacheLock.unlock(); return cached }
+        cacheLock.unlock()
+
+        let generator = CIFilter.code128BarcodeGenerator()
+        generator.message = Data(code.utf8)
+        generator.quietSpace = 8
+        guard let image = generator.outputImage,
+              let cg = CIContext().createCGImage(image, from: image.extent)
+        else { return [] }
+        let rep = NSBitmapImageRep(cgImage: cg)
+        let row = rep.pixelsHigh / 2
+        let columns = (0..<rep.pixelsWide).map { x in
+            (rep.colorAt(x: x, y: row)?.brightnessComponent ?? 1) < 0.5
+        }
+        cacheLock.lock()
+        if columnCache.count > 40 { columnCache.removeAll() }
+        columnCache[code] = columns
+        cacheLock.unlock()
+        return columns
+    }
+
     // MARK: - Print contrast
     //
     // Whether bars can sit straight on a coloured field is a print question,
@@ -233,9 +259,15 @@ enum Verification {
     }
 
     static func printContrast(onField color: NSColor) -> Double {
+        printContrast(bars: inkColor, onField: color)
+    }
+
+    /// PCS for an arbitrary pair — the strip is not always drawn in ink.
+    static func printContrast(bars: NSColor, onField color: NSColor) -> Double {
         let light = reflectance(of: color)
-        guard light > 0 else { return 0 }
-        return (light - inkReflectance) / light
+        let dark = reflectance(of: bars)
+        guard light > 0, light > dark else { return 0 }
+        return (light - dark) / light
     }
 
     /// Nil when the field is light enough to take bars directly. Otherwise the

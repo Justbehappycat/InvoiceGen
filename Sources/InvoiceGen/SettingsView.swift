@@ -199,6 +199,13 @@ struct SettingsView: View {
                 Toggle("Print the barcode on invoices", isOn: business.printVerificationCode)
                     .disabled(!store.hasVerificationPassphrase)
 
+                Picker("Strip under the title", selection: business.verificationStripInk) {
+                    Text("Quiet — matches the banner").tag(false)
+                    Text("Ink — readable by a scanner").tag(true)
+                }
+                .pickerStyle(.radioGroup)
+                .disabled(!store.hasVerificationPassphrase)
+
                 contrastNote
 
                 if lock.isUnlocked {
@@ -256,20 +263,28 @@ struct SettingsView: View {
     /// Whether the bars can print straight on the banner colour is a print
     /// question, so the app measures it (print contrast signal, the barcode
     /// standards' own metric) and says what it did.
+    /// Print contrast signal is the barcode standards' own metric, so the app
+    /// measures it and says plainly what the chosen tone can and can't do.
     private var contrastNote: some View {
-        let accent = NSColor(Color(hex: store.data.business.accentHex))
-        let contrast = Verification.printContrast(onField: accent)
-        let needsBand = Verification.guardBand(forField: accent) != nil
+        let business = store.data.business
+        let field = NSColor(Color(hex: business.accentHex))
+        let bars = business.verificationStripInk
+            ? Verification.inkColor
+            : NSColor(Color(hex: business.accentHex).adjustingBrightness(0.78))
+        let contrast = Verification.printContrast(bars: bars, onField: field)
+        let scannable = contrast >= Verification.minimumContrast
         return HStack(alignment: .top, spacing: 6) {
-            Image(systemName: needsBand ? "square.on.square" : "checkmark.circle")
-                .foregroundColor(needsBand ? .orange : .secondary)
-            Text(needsBand
-                 ? "Your accent colour is too dark to print a readable barcode on "
-                   + "(contrast \(String(format: "%.2f", contrast)), needs "
-                   + "\(String(format: "%.2f", Verification.minimumContrast))), so a lighter band "
-                   + "of the same colour prints behind the bars."
-                 : "Bars print straight on your banner colour — contrast "
-                   + "\(String(format: "%.2f", contrast)), comfortably scannable.")
+            Image(systemName: scannable ? "barcode.viewfinder" : "eye")
+                .foregroundColor(scannable ? .green : .secondary)
+            Text(scannable
+                 ? "Print contrast \(String(format: "%.2f", contrast)) — above the "
+                   + "\(String(format: "%.2f", Verification.minimumContrast)) floor, so a scanner "
+                   + "can read the strip off a printed sheet."
+                 : "Print contrast \(String(format: "%.2f", contrast)), under the "
+                   + "\(String(format: "%.2f", Verification.minimumContrast)) floor. The strip is "
+                   + "decorative at this tone: verify by dropping the PDF here, or by the code "
+                   + "printed in the footer. Switch to ink if you want it scannable — there is no "
+                   + "tone in between that passes.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

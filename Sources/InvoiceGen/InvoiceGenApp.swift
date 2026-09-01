@@ -354,6 +354,7 @@ struct InvoiceGenApp: App {
             business.website = "example.com"
             business.verificationSalt = Data(repeating: 0x2A, count: 16)
             business.verificationPassphrase = "sample passphrase"
+            business.verificationStripInk = args.contains("ink")
 
             var customer = Customer()
             customer.name = "Harbour Coffee Roasters"
@@ -398,6 +399,59 @@ struct InvoiceGenApp: App {
                 exit(0)
             }
             exit(1)
+        }
+        if args.contains("--selftest-mark") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            _ = NSApplication.shared
+            MainActor.assumeIsolated {
+                let salt = Data(repeating: 0x2A, count: 16)
+                guard let key = Verification.cachedKey(passphrase: "sample passphrase", salt: salt)
+                else { print("no key — FAILED"); exit(1) }
+
+                var business = BusinessProfile()
+                business.name = "Northwind Studio LLC"
+                business.verificationSalt = salt
+                business.verificationPassphrase = "sample passphrase"
+                var customer = Customer(); customer.name = "Harbour Coffee Roasters"
+                var invoice = Invoice()
+                invoice.number = "11"
+                invoice.items = [LineItem(title: "Edit", details: "", quantity: 3, price: 500)]
+                let code = Verification.code(for: invoice, key: key)
+
+                let accent = NSColor(Color(hex: business.accentHex))
+                let quiet = NSColor(Color(hex: business.accentHex).adjustingBrightness(0.78))
+                print(String(format: "contrast · quiet strip: %.2f   ink strip: %.2f   (floor %.2f)",
+                             Verification.printContrast(bars: quiet, onField: accent),
+                             Verification.printContrast(bars: Verification.inkColor, onField: accent),
+                             Verification.minimumContrast))
+
+                @MainActor func render(ink: Bool) -> URL? {
+                    var profile = business
+                    profile.verificationStripInk = ink
+                    guard let data = PDFExporter.makePDFData(
+                        invoice: invoice, customer: customer, business: profile) else { return nil }
+                    let url = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("ig-mark-\(ink ? "ink" : "quiet").pdf")
+                    try? data.write(to: url)
+                    return url
+                }
+
+                for ink in [true, false] {
+                    guard let url = render(ink: ink) else { print("render FAILED"); exit(1) }
+                    let report = PDFVerifier.verify(url: url, key: key, invoices: [invoice])
+                    let label = ink ? "ink  " : "quiet"
+                    print("\(label) · bars decode:", report.scannedCode ?? "no",
+                          ink ? (report.scannedCode == code ? "ok" : "FAILED — ink must scan")
+                              : "(expected: decorative)")
+                    print("\(label) · footer code read:", report.printedCode ?? "none",
+                          report.printedCode == code ? "ok" : "FAILED")
+                    print("\(label) · verdict:", "\(report.verdict)",
+                          report.verdict == .genuine ? "ok" : "FAILED")
+                    try? FileManager.default.removeItem(at: url)
+                }
+                print("A quiet strip still verifies: the PDF check falls back to the printed code.")
+            }
+            exit(0)
         }
         if args.contains("--selftest-pdf") {
             setvbuf(stdout, nil, _IONBF, 0)

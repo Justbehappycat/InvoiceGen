@@ -37,6 +37,10 @@ struct InvoiceDocumentView: View {
     /// The signature printed on the sheet, when a passphrase is set and the
     /// business hasn't switched it off. Derived from the business profile the
     /// view already holds, so pagination measures the real thing.
+    private var displayTitle: String {
+        invoice.title.isEmpty ? "INVOICE" : invoice.title
+    }
+
     private var verificationCode: String? {
         if let verificationCodeOverride { return verificationCodeOverride }
         guard business.printVerificationCode,
@@ -111,17 +115,28 @@ struct InvoiceDocumentView: View {
         case .banner:
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let verificationCode {
-                        barcodeStrip(verificationCode, field: accent)
-                            .padding(.leading, 44)
-                            .padding(.top, 14)
-                    }
                     Spacer(minLength: 0)
-                    Text(invoice.title.isEmpty ? "INVOICE" : invoice.title)
-                        .font(.system(size: 30, weight: .regular))
-                        .foregroundColor(.white)
+                    if let verificationCode {
+                        // The title *is* the mark: solid at the top, combing
+                        // open into the code at its foot.
+                        VerificationMark(
+                            title: displayTitle,
+                            code: verificationCode,
+                            ink: .white,
+                            field: accent,
+                            stripTone: business.verificationStripInk
+                                ? Color(nsColor: Verification.inkColor)
+                                : accentDark
+                        )
                         .padding(.leading, 44)
-                        .padding(.bottom, 22)
+                        .padding(.bottom, 18)
+                    } else {
+                        Text(displayTitle)
+                            .font(.system(size: 30, weight: .regular))
+                            .foregroundColor(.white)
+                            .padding(.leading, 44)
+                            .padding(.bottom, 22)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: 118)
@@ -168,36 +183,22 @@ struct InvoiceDocumentView: View {
                 }
                 Rectangle().fill(accent).frame(height: 3)
                 if let verificationCode {
-                    barcodeStrip(verificationCode, field: .white).padding(.top, 8)
+                    VerificationMark(
+                        title: displayTitle,
+                        code: verificationCode,
+                        ink: Color(nsColor: Verification.inkColor),
+                        field: .white,
+                        stripTone: business.verificationStripInk
+                            ? Color(nsColor: Verification.inkColor)
+                            : Color(white: 0.45),
+                        fontSize: 26
+                    )
+                    .padding(.top, 8)
                 }
             }
             .padding(.horizontal, 44)
             .padding(.top, 40)
         }
-    }
-
-    /// The bars sit straight on the invoice's own colour field — no plate, no
-    /// sticker. A band appears behind them only when the accent is too dark to
-    /// print a readable symbol, and `Verification.guardBand` decides that by
-    /// print contrast rather than by eye.
-    private func barcodeStrip(_ code: String, field: Color) -> some View {
-        let fieldColor = NSColor(field)
-        let band = Verification.guardBand(forField: fieldColor)
-        return Group {
-            if let image = Verification.cachedBarcode(for: code) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.none)          // never blur a barcode
-                    // Stretched to a fixed plate rather than fitted: every
-                    // module widens by the same factor, which a scanner is
-                    // happy with, and the symbol starts exactly on the margin.
-                    .frame(width: 232, height: 30)
-            }
-        }
-        .padding(.horizontal, band == nil ? 0 : 8)
-        .padding(.vertical, band == nil ? 0 : 4)
-        .background(band.map { Color(nsColor: $0) })
-        .cornerRadius(band == nil ? 0 : 2)
     }
 
     /// The readable form of the code, for reading down a phone line, plus the
@@ -216,7 +217,7 @@ struct InvoiceDocumentView: View {
 
     private var continuationHeader: some View {
         HStack {
-            Text("\(invoice.title.isEmpty ? "INVOICE" : invoice.title) #\(invoice.number) — continued")
+            Text("\(displayTitle) #\(invoice.number) — continued")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.black)
             Spacer()
