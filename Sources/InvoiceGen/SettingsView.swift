@@ -289,6 +289,13 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .textSelection(.enabled)
+                HStack(spacing: 6) {
+                    Text("InvoiceGen")
+                    Text(AppVersion.display)
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .textSelection(.enabled)
                 HStack {
                     Button("Reveal data file") {
                         store.saveNow()
