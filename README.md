@@ -69,8 +69,10 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 - The title in the banner is set in ink rather than white for the same reason —
   a white title would force the tone ramp to cross the banner colour itself,
   which reads as mud rather than as a transition.
-- The dissolve holds the letters solid through the upper two-thirds (gamma
-  1.4) before opening up. A linear taper eats the letters too early and the
+- The code runs through nearly the whole word (fade 0.9), leaving only the caps
+  solid, so the bars blend into the letters rather than stopping partway down.
+  Fade and gamma move together: raising the fade without raising gamma makes
+  the cuts wide by mid-letter and the word stops reading. A linear taper eats the letters too early and the
   title stops reading; a cut wider than a stroke deletes the letter outright,
   which is why cut width is tied to the module grid rather than chosen by eye.
 - The strip has two tones, and the choice is binary because print contrast

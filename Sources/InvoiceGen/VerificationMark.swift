@@ -23,11 +23,15 @@ struct VerificationMark: View {
     let stripTone: Color
     var fontSize: CGFloat = 40
     var tracking: CGFloat = 6
-    /// How far up the letters the dissolve reaches, as a fraction of cap height.
-    var fade: CGFloat = 0.60
-    /// >1 holds the letters solid for longer before they open up. At 1.0 the
-    /// taper starts eating the letters immediately and INVOICE stops reading.
-    var gamma: CGFloat = 1.4
+    /// How far up the letters the dissolve reaches, as a fraction of cap
+    /// height. At 0.9 the code runs through nearly the whole word, leaving
+    /// only the caps solid.
+    var fade: CGFloat = 0.90
+    /// >1 holds the letters solid for longer before they open up. Raising the
+    /// fade without raising this eats the letters: at gamma 1.4 and fade 0.9
+    /// the cuts are already wide by mid-letter and INVOICE stops reading, so
+    /// the two move together.
+    var gamma: CGFloat = 2.0
     var strip: CGFloat = 18
     /// How far the bar columns rise out of the strip and into the word, as a
     /// fraction of the fade height.
