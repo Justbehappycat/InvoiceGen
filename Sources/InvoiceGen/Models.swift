@@ -43,6 +43,8 @@ struct BusinessProfile: Codable, Hashable {
     /// own mark by local contrast, so this can go as low as taste allows —
     /// it does not have to clear the scanner standards' 0.70.
     var verificationBarTone: Double = 0.10
+    /// Whether the one-time correction below has already run for this file.
+    var markStyleMigrated: Bool = true
 
     // Tolerant decoding: older data files simply lack the newer keys.
     enum CodingKeys: String, CodingKey {
@@ -51,7 +53,7 @@ struct BusinessProfile: Codable, Hashable {
         case defaultPaymentTermDays, defaultNotes, defaultFooterMessage, paymentMethods
         case defaultColumns, verificationPassphrase, verificationSalt, printVerificationCode
         case verificationStripInk, verificationMarkContained
-        case verificationMarkStyle, verificationBarTone
+        case verificationMarkStyle, verificationBarTone, markStyleMigrated
     }
 
     init() {}
@@ -94,6 +96,7 @@ struct BusinessProfile: Codable, Hashable {
             ?? containedChoice.map { $0 ? .letters : .strip }
             ?? .banner
         verificationBarTone = try c.decodeIfPresent(Double.self, forKey: .verificationBarTone) ?? 0.10
+        markStyleMigrated = try c.decodeIfPresent(Bool.self, forKey: .markStyleMigrated) ?? false
     }
 
     var addressLines: [String] {

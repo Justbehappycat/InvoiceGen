@@ -158,6 +158,19 @@ final class AppStore: ObservableObject {
     /// still carries that exact block, turn it into structured methods.
     private static func migrate(_ data: AppData) -> AppData {
         var data = data
+
+        // One-time correction of a bad default. When the mark-style setting
+        // was introduced, a file that predated it was mapped through the old
+        // "contained" flag, whose default was true — so every existing file
+        // was silently pinned to the in-letter mark rather than taking the
+        // current default. This puts those files right, once, and records that
+        // it ran so a later deliberate choice of the in-letter mark sticks.
+        if !data.business.markStyleMigrated {
+            if data.business.verificationMarkStyle == .letters {
+                data.business.verificationMarkStyle = .banner
+            }
+            data.business.markStyleMigrated = true
+        }
         let legacyNotes = """
         Methods of Payment:
         1. Zelle

@@ -199,7 +199,15 @@ struct SettingsView: View {
                 Toggle("Print the barcode on invoices", isOn: business.printVerificationCode)
                     .disabled(!store.hasVerificationPassphrase)
 
-                Picker("The mark", selection: business.verificationMarkStyle) {
+                Picker("The mark", selection: Binding(
+                    get: { store.data.business.verificationMarkStyle },
+                    set: { newValue in
+                        store.data.business.verificationMarkStyle = newValue
+                        // A choice made here is deliberate, so the one-time
+                        // correction must never second-guess it.
+                        store.data.business.markStyleMigrated = true
+                    }
+                )) {
                     ForEach(VerificationMarkStyle.allCases) { style in
                         Text(style.label).tag(style)
                     }
