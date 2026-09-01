@@ -29,6 +29,16 @@ struct VerificationMark: View {
     /// taper starts eating the letters immediately and INVOICE stops reading.
     var gamma: CGFloat = 1.4
     var strip: CGFloat = 22
+    /// How far the bar columns rise out of the strip and into the word, as a
+    /// fraction of the fade height.
+    ///
+    /// Without this the seam doesn't stitch: the strip carries a bar in every
+    /// bar column, but above the baseline only the letters carry ink, so
+    /// between the letters a bar appears out of nothing. The risers continue
+    /// every column across the join — gap meets gap, bar meets bar — and ramp
+    /// from the strip's tone to the letters' ink so the colour doesn't step
+    /// either.
+    var riser: CGFloat = 0.30
 
     private var font: NSFont { .systemFont(ofSize: fontSize, weight: .medium) }
     private var capHeight: CGFloat { font.capHeight }
@@ -61,6 +71,27 @@ struct VerificationMark: View {
                                           baselineY: baselineY, fadeHeight: fadeHeight,
                                           gamma: gamma),
                                with: .color(field))
+                }
+            }
+
+            // Risers: every bar column continues up across the seam, tone
+            // ramping from the strip to the ink. Drawn over the letters' feet,
+            // never clipped to them — that's the whole point.
+            if riser > 0 {
+                let riserHeight = fadeHeight * riser
+                let bands = 24
+                let from = NSColor(stripTone)
+                let to = NSColor(ink)
+                for band in 0..<bands {
+                    let t = CGFloat(band) / CGFloat(bands - 1)
+                    let tone = from.blended(withFraction: t, of: to) ?? to
+                    let y = baselineY - (t + 1 / CGFloat(bands)) * riserHeight
+                    for (index, isBar) in modules.enumerated() where isBar {
+                        let rect = CGRect(x: CGFloat(index) * moduleWidth, y: y,
+                                          width: moduleWidth,
+                                          height: riserHeight / CGFloat(bands) + 0.4)
+                        context.fill(Path(rect), with: .color(Color(nsColor: tone)))
+                    }
                 }
             }
 

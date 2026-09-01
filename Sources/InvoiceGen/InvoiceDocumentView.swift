@@ -119,10 +119,14 @@ struct InvoiceDocumentView: View {
                     if let verificationCode {
                         // The title *is* the mark: solid at the top, combing
                         // open into the code at its foot.
+                        // Ink letters, not white: the mark ramps from the
+                        // strip's tone into the letters, and a white title
+                        // would force that ramp to cross the banner colour
+                        // itself — muddy in the middle, no continuity.
                         VerificationMark(
                             title: displayTitle,
                             code: verificationCode,
-                            ink: .white,
+                            ink: Color(nsColor: Verification.inkColor),
                             field: accent,
                             stripTone: business.verificationStripInk
                                 ? Color(nsColor: Verification.inkColor)

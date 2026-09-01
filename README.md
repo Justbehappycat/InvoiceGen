@@ -56,6 +56,14 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   resolving into the code. Drawn as vector paths, so it stays crisp at any
   print resolution. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
   quietly in the footer.
+- Every bar column *rises* out of the strip and across the baseline, ramping
+  in tone from the strip to the letters' ink. Without that the join doesn't
+  stitch: the strip carries a bar in every column, but above the baseline only
+  the letters carry ink, so between letters a bar appears out of nothing. With
+  it, gap meets gap and bar meets bar all the way across.
+- The title in the banner is set in ink rather than white for the same reason —
+  a white title would force the tone ramp to cross the banner colour itself,
+  which reads as mud rather than as a transition.
 - The dissolve holds the letters solid through the upper two-thirds (gamma
   1.4) before opening up. A linear taper eats the letters too early and the
   title stops reading; a cut wider than a stroke deletes the letter outright,
