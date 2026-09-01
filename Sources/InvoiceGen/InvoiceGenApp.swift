@@ -504,6 +504,10 @@ struct InvoiceGenApp: App {
                 business.name = "Northwind Studio LLC"
                 business.verificationSalt = salt
                 business.verificationPassphrase = "sample passphrase"
+                // Scannable settings, so this test exercises the bars as well
+                // as the text; the shipping default is a tint no scanner reads.
+                business.verificationMarkStyle = .banner
+                business.verificationBarTone = 0.45
                 var customer = Customer(); customer.name = "Harbour Coffee Roasters"
 
                 var invoice = Invoice()
@@ -531,8 +535,9 @@ struct InvoiceGenApp: App {
                 }
                 var report = PDFVerifier.verify(url: clean, key: key, invoices: [invoice])
                 print("clean PDF:")
+                let genuinePayload = Verification.barcodePayload(for: genuineCode)
                 print("  bars decoded:", report.scannedCode ?? "none",
-                      report.scannedCode == genuineCode ? "ok" : "FAILED")
+                      report.scannedCode == genuinePayload ? "ok" : "FAILED")
                 print("  read off the page: number=\(report.number ?? "-") "
                       + "date=\(report.date.map(Verification.isoDate) ?? "-") "
                       + "items=\(report.quantity.map { "\($0)" } ?? "-") "
@@ -633,7 +638,10 @@ struct InvoiceGenApp: App {
                     let request = VNDetectBarcodesRequest()
                     try? VNImageRequestHandler(cgImage: cg).perform([request])
                     let decoded = (request.results ?? []).compactMap { $0.payloadStringValue }
-                    print("barcode round-trip:", decoded.first == code ? "scans back to the code" : "FAILED \(decoded)")
+                    let payload = Verification.barcodePayload(for: code)
+                    print("barcode round-trip:", decoded.first == payload
+                          ? "scans back to \(payload), the code's numeric payload"
+                          : "FAILED \(decoded), expected \(payload)")
                 } else {
                     print("barcode round-trip: FAILED to render")
                 }

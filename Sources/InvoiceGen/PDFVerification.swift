@@ -91,11 +91,13 @@ enum PDFVerifier {
             report.notes.append("No barcode could be read from the page"
                 + (report.printedCode != nil ? " — using the printed code instead." : "."))
         } else if let scanned = report.scannedCode, let printed = report.printedCode,
-                  scanned != printed {
-            report.notes.append("The barcode says \(scanned) but the printed code says \(printed).")
+                  scanned != Verification.barcodePayload(for: printed) {
+            report.notes.append("The bars encode \(scanned) but the printed code says \(printed).")
         }
 
-        guard let code = report.scannedCode ?? report.printedCode else { return report }
+        // The bars carry a numeric payload; the footer carries the readable
+        // code, and that is what the rest of the checks work from.
+        guard let code = report.printedCode ?? report.scannedCode else { return report }
         if let agreement = readOwnMark(document: document, expecting: code),
            agreement >= Self.stripeMatchThreshold {
             report.stripeAgreement = agreement
@@ -210,7 +212,8 @@ enum PDFVerifier {
             request.symbologies = [.code128]
             try? VNImageRequestHandler(cgImage: cg).perform([request])
             let payloads = (request.results ?? []).compactMap { $0.payloadStringValue }
-            if let hit = payloads.first(where: { $0.hasPrefix(Verification.prefix + "-") }) {
+            // The bars carry the numeric payload, not the readable code.
+            if let hit = payloads.first(where: { $0.allSatisfy(\.isNumber) && $0.count >= 8 }) {
                 return hit
             }
         }

@@ -111,7 +111,13 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   read, and it decoded a quiet strip in a clean digital render that then failed
   off the rendered page.
 - The code is an HMAC-SHA256 signature over exactly four fields: invoice
-  number, invoice date, total quantity, total amount. Change any one of them
+  number, invoice date, total quantity, total amount. The signature prints as
+  eight decimal digits (`IG1-11-48219073`), and the bars encode digits only —
+  four of invoice number, eight of signature. Code 128 packs two digits into
+  one symbol, so an all-numeric payload halves the bar count: 106 bars instead
+  of 216 across the same width, which is the difference between fine texture
+  and deliberate stripes. 10^8 of signature is ample when forging one requires
+  the passphrase regardless; the length only has to resist blind guessing. Change any one of them
   and the code stops verifying.
 - The key is derived from a passphrase you set (Settings ▸ Security ▸ Invoice
   verification, behind the same Touch ID gate as payment details) with PBKDF2

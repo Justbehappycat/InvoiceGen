@@ -119,7 +119,13 @@ enum Verification {
 
     // MARK: - Code
 
-    /// `IG1-11-4A7C9E2B` — prefix, invoice number, eight hex digits of HMAC.
+    /// `IG1-11-48219073` — prefix, invoice number, eight digits of HMAC.
+    ///
+    /// Decimal rather than hex on purpose: Code 128 packs two digits into one
+    /// symbol, so an all-numeric payload halves the bar count and the mark
+    /// reads as stripes instead of texture. 10^8 of signature is ample when
+    /// forging one requires the passphrase anyway — the length only has to
+    /// resist blind guessing.
     static func code(for invoice: Invoice, key: SymmetricKey) -> String {
         code(number: invoice.number, date: invoice.issueDate,
              quantity: totalQuantity(of: invoice), total: invoice.total, key: key)
@@ -132,7 +138,9 @@ enum Verification {
         let payload = [prefix, number, isoDate(date),
                        decimalString(quantity), decimalString(total)].joined(separator: "|")
         let mac = HMAC<SHA256>.authenticationCode(for: Data(payload.utf8), using: key)
-        let signature = Data(mac).prefix(4).map { String(format: "%02X", $0) }.joined()
+        let bytes = Array(Data(mac).prefix(4))
+        let value = bytes.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) } % 100_000_000
+        let signature = String(format: "%08u", value)
         return "\(prefix)-\(number)-\(signature)"
     }
 
@@ -157,7 +165,7 @@ enum Verification {
         guard parts.count >= 3, parts[0] == prefix else { return .malformed }
         let signature = String(parts[parts.count - 1])
         let number = parts[1..<(parts.count - 1)].joined(separator: "-")
-        guard signature.count == 8, signature.allSatisfy(\.isHexDigit) else { return .malformed }
+        guard signature.count == 8, signature.allSatisfy(\.isNumber) else { return .malformed }
 
         guard let invoice = data.invoices.first(where: { $0.number.uppercased() == number }) else {
             return .unknownInvoice(number: number)
@@ -181,7 +189,7 @@ enum Verification {
     /// the code reads as part of the design rather than a sticker on top of it.
     static func barcodeImage(for code: String, ink: NSColor = inkColor, scale: CGFloat = 12) -> NSImage? {
         let generator = CIFilter.code128BarcodeGenerator()
-        generator.message = Data(code.utf8)
+        generator.message = Data(barcodePayload(for: code).utf8)
         generator.quietSpace = 8
         guard let generated = generator.outputImage else { return nil }
 
@@ -208,15 +216,29 @@ enum Verification {
         return image
     }
 
+    /// What the bars actually encode: four digits of invoice number and the
+    /// eight-digit signature. All digits, so Code 128 uses its numeric subset
+    /// and the symbol is roughly half as dense as the printed code would be.
+    static func barcodePayload(for code: String) -> String {
+        let parts = code.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count >= 3 else { return code.filter(\.isNumber) }
+        let signature = String(parts[parts.count - 1])
+        let number = parts[1..<(parts.count - 1)].joined(separator: "-").filter(\.isNumber)
+        let short = String(number.suffix(4))
+        let padded = String(repeating: "0", count: max(0, 4 - short.count)) + short
+        return padded + signature
+    }
+
     /// The symbol as one bool per module column, true = bar. Used by the
     /// drawn mark, which needs the pattern itself rather than an image of it.
     static func moduleColumns(for code: String) -> [Bool] {
+        let payload = barcodePayload(for: code)
         cacheLock.lock()
-        if let cached = columnCache[code] { cacheLock.unlock(); return cached }
+        if let cached = columnCache[payload] { cacheLock.unlock(); return cached }
         cacheLock.unlock()
 
         let generator = CIFilter.code128BarcodeGenerator()
-        generator.message = Data(code.utf8)
+        generator.message = Data(payload.utf8)
         generator.quietSpace = 8
         guard let image = generator.outputImage,
               let cg = CIContext().createCGImage(image, from: image.extent)
@@ -228,7 +250,7 @@ enum Verification {
         }
         cacheLock.lock()
         if columnCache.count > 40 { columnCache.removeAll() }
-        columnCache[code] = columns
+        columnCache[payload] = columns
         cacheLock.unlock()
         return columns
     }
