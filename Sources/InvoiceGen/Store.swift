@@ -478,8 +478,54 @@ final class AppStore: ObservableObject {
         Verification.verify(scanned, in: data, key: verificationKey)
     }
 
+    // MARK: - Archive and trash
+
+    /// Everything that is live work: not archived, not in the trash.
+    var activeInvoices: [Invoice] {
+        data.invoices.filter { !$0.isArchived && !$0.isTrashed }
+    }
+
+    var archivedInvoices: [Invoice] {
+        data.invoices.filter { $0.isArchived && !$0.isTrashed }
+    }
+
+    var trashedInvoices: [Invoice] {
+        data.invoices.filter { $0.isTrashed }
+    }
+
+    func setArchived(_ archived: Bool, on id: UUID) {
+        guard let index = data.invoices.firstIndex(where: { $0.id == id }) else { return }
+        commitHistory()
+        data.invoices[index].archivedAt = archived ? Date() : nil
+        commitHistory()
+    }
+
+    /// Deleting is a move to the trash, never a destruction. `emptyTrash` and
+    /// `permanentlyDelete` are the only things that actually remove an invoice.
     func deleteInvoice(id: UUID) {
+        guard let index = data.invoices.firstIndex(where: { $0.id == id }) else { return }
+        commitHistory()
+        data.invoices[index].deletedAt = Date()
+        commitHistory()
+    }
+
+    func restoreFromTrash(id: UUID) {
+        guard let index = data.invoices.firstIndex(where: { $0.id == id }) else { return }
+        commitHistory()
+        data.invoices[index].deletedAt = nil
+        commitHistory()
+    }
+
+    func permanentlyDelete(id: UUID) {
+        commitHistory()
         data.invoices.removeAll { $0.id == id }
+        commitHistory()
+    }
+
+    func emptyTrash() {
+        commitHistory()
+        data.invoices.removeAll { $0.isTrashed }
+        commitHistory()
     }
 
     func invoice(id: UUID) -> Invoice? {
@@ -546,7 +592,7 @@ final class AppStore: ObservableObject {
     }
 
     func invoices(for customerID: UUID) -> [Invoice] {
-        data.invoices.filter { $0.customerID == customerID }
+        data.invoices.filter { $0.customerID == customerID && !$0.isTrashed }
     }
 
     // MARK: - Catalog

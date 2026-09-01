@@ -91,9 +91,18 @@ struct InvoiceRow: View {
                         .foregroundColor(customer == nil ? .secondary : .primary)
                         .lineLimit(1)
                 }
-                Text("Due \(Fmt.shortDate(invoice.dueDate))")
-                    .font(.caption)
-                    .foregroundColor(invoice.isOverdue ? .orange : .secondary)
+                HStack(spacing: 6) {
+                    Text(invoice.isTrashed
+                         ? "Deleted \(Fmt.shortDate(invoice.deletedAt ?? Date()))"
+                         : "Due \(Fmt.shortDate(invoice.dueDate))")
+                    if invoice.isArchived, !invoice.isTrashed {
+                        Image(systemName: "archivebox")
+                            .imageScale(.small)
+                            .help("Archived")
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(invoice.isOverdue ? .orange : .secondary)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -103,6 +112,8 @@ struct InvoiceRow: View {
             }
         }
         .padding(.vertical, 3)
+        // Set-aside work reads as set aside.
+        .opacity(invoice.isTrashed ? 0.55 : 1)
     }
 }
 

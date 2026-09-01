@@ -20,6 +20,7 @@ struct InvoiceEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            stateBanner
             actionBar
             Divider()
             HSplitView {
@@ -52,6 +53,34 @@ struct InvoiceEditorView: View {
     // Deliberately part of the pane rather than the window toolbar: toolbar
     // items float over the split view and collapse into an overflow menu when
     // the window is narrow.
+
+    /// An archived or trashed invoice can still be opened; it says so, and
+    /// offers the one action that matters.
+    @ViewBuilder
+    private var stateBanner: some View {
+        if invoice.isTrashed {
+            stateStrip(icon: "trash", tint: .red,
+                       text: "In the trash — deleted \(Fmt.shortDate(invoice.deletedAt ?? Date()))",
+                       action: "Put Back") { store.restoreFromTrash(id: invoice.id) }
+        } else if invoice.isArchived {
+            stateStrip(icon: "archivebox", tint: .secondary,
+                       text: "Archived \(Fmt.shortDate(invoice.archivedAt ?? Date()))",
+                       action: "Move to Invoices") { store.setArchived(false, on: invoice.id) }
+        }
+    }
+
+    private func stateStrip(icon: String, tint: Color, text: String,
+                            action: String, perform: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).foregroundColor(tint)
+            Text(text).font(.callout)
+            Spacer()
+            Button(action, action: perform).controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(tint.opacity(0.10))
+    }
 
     private var actionBar: some View {
         HStack(spacing: 10) {

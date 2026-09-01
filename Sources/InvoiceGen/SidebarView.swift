@@ -1,6 +1,27 @@
 import SwiftUI
 import AppKit
 
+/// Which pile of invoices the sidebar is showing.
+enum InvoiceScope: String, CaseIterable, Identifiable {
+    case active, archive, trash
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .active: return "Invoices"
+        case .archive: return "Archive"
+        case .trash: return "Trash"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .active: return "line.3.horizontal.decrease.circle"
+        case .archive: return "archivebox"
+        case .trash: return "trash"
+        }
+    }
+}
+
 /// The left column: section switcher plus the invoice or customer list.
 struct SidebarView: View {
     @EnvironmentObject var store: AppStore
@@ -9,6 +30,10 @@ struct SidebarView: View {
     @Binding var section: SidebarSection
     @Binding var search: String
     @Binding var statusFilter: InvoiceStatus?
+
+    /// Which pile of invoices the list is showing. Kept in preferences so the
+    /// app doesn't reopen in the trash.
+    @AppStorage("invoiceScope") private var scope: InvoiceScope = .active
 
     /// Only the two day-to-day sections switch here. Saved items and Settings
     /// live in the bar at the bottom: they are set-up, not daily work.
@@ -68,7 +93,16 @@ struct SidebarView: View {
         .padding(.vertical, 7)
     }
 
+    private func count(of scope: InvoiceScope) -> Int {
+        switch scope {
+        case .active: return store.activeInvoices.count
+        case .archive: return store.archivedInvoices.count
+        case .trash: return store.trashedInvoices.count
+        }
+    }
+
     private func newInvoice() {
+        scope = .active
         let invoice = store.newInvoice()
         focus.invoiceID = invoice.id
         section = .invoices
@@ -78,8 +112,24 @@ struct SidebarView: View {
         SettingsWindowController.shared.show(store: store, focus: focus)
     }
 
+    private var scopedInvoices: [Invoice] {
+        switch scope {
+        case .active: return store.activeInvoices
+        case .archive: return store.archivedInvoices
+        case .trash: return store.trashedInvoices
+        }
+    }
+
+    /// The archive is filed by year, newest first — that's how you look for
+    /// something from two Marches ago.
+    private var archiveYears: [(year: Int, invoices: [Invoice])] {
+        Dictionary(grouping: filteredInvoices, by: \.year)
+            .map { (year: $0.key, invoices: $0.value.sorted { $0.issueDate > $1.issueDate }) }
+            .sorted { $0.year > $1.year }
+    }
+
     private var filteredInvoices: [Invoice] {
-        let matches = store.data.invoices.filter { invoice in
+        let matches = scopedInvoices.filter { invoice in
             if let statusFilter, invoice.status != statusFilter { return false }
             guard !search.isEmpty else { return true }
             let customerName = store.customer(id: invoice.customerID)?.displayName ?? ""
@@ -108,8 +158,36 @@ struct SidebarView: View {
                 if newValue != nil, section != .invoices { section = .invoices }
             }
         )) {
-            ForEach(filteredInvoices) { invoice in
-                InvoiceRow(invoice: invoice, customer: store.customer(id: invoice.customerID))
+            if scope == .archive {
+                ForEach(archiveYears, id: \.year) { group in
+                    Section("\(String(group.year))  ·  \(group.invoices.count)") {
+                        ForEach(group.invoices) { invoice in
+                            row(for: invoice)
+                        }
+                    }
+                }
+            } else {
+                ForEach(filteredInvoices) { invoice in
+                    row(for: invoice)
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .top, spacing: 0) { invoiceFilterBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) { summaryBar }
+        .searchable(text: $search, placement: .sidebar, prompt: searchPrompt)
+    }
+
+    private var searchPrompt: String {
+        switch scope {
+        case .active: return "Search invoices"
+        case .archive: return "Search the archive"
+        case .trash: return "Search the trash"
+        }
+    }
+
+    private func row(for invoice: Invoice) -> some View {
+        InvoiceRow(invoice: invoice, customer: store.customer(id: invoice.customerID))
                     .tag(invoice.id)
                     .contextMenu {
                         Menu("Status") {
@@ -130,40 +208,74 @@ struct SidebarView: View {
                             Button("Mark as Paid") { store.setStatus(.paid, on: invoice.id) }
                         }
                         Divider()
-                        Button("Duplicate") {
-                            let copy = store.duplicate(invoice)
-                            focus.invoiceID = copy.id
-                        }
-                        Button("Delete", role: .destructive) {
-                            if focus.invoiceID == invoice.id { focus.invoiceID = nil }
-                            store.deleteInvoice(id: invoice.id)
+                        if invoice.isTrashed {
+                            Button("Put Back") { store.restoreFromTrash(id: invoice.id) }
+                            Button("Delete Permanently", role: .destructive) {
+                                if focus.invoiceID == invoice.id { focus.invoiceID = nil }
+                                store.permanentlyDelete(id: invoice.id)
+                            }
+                        } else {
+                            Button("Duplicate") {
+                                let copy = store.duplicate(invoice)
+                                focus.invoiceID = copy.id
+                            }
+                            Button(invoice.isArchived ? "Move to Invoices" : "Archive") {
+                                store.setArchived(!invoice.isArchived, on: invoice.id)
+                            }
+                            Button("Move to Trash", role: .destructive) {
+                                if focus.invoiceID == invoice.id { focus.invoiceID = nil }
+                                store.deleteInvoice(id: invoice.id)
+                            }
                         }
                     }
-            }
-        }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) { invoiceFilterBar }
-        .safeAreaInset(edge: .bottom, spacing: 0) { summaryBar }
-        .searchable(text: $search, placement: .sidebar, prompt: "Search invoices")
     }
 
     private var invoiceFilterBar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Menu {
-                    Button("All") { statusFilter = nil }
-                    ForEach(InvoiceStatus.allCases) { status in
-                        Button(status.label) { statusFilter = status }
+                    Section("Show") {
+                        ForEach(InvoiceScope.allCases) { item in
+                            Button {
+                                scope = item
+                            } label: {
+                                Label(
+                                    "\(item.label) (\(count(of: item)))",
+                                    systemImage: scope == item ? "checkmark" : item.systemImage
+                                )
+                            }
+                        }
+                    }
+                    if scope != .trash {
+                        Section("Status") {
+                            Button("All") { statusFilter = nil }
+                            ForEach(InvoiceStatus.allCases) { status in
+                                Button(status.label) { statusFilter = status }
+                            }
+                        }
                     }
                 } label: {
-                    Label(statusFilter?.label ?? "All", systemImage: "line.3.horizontal.decrease.circle")
+                    Label(scope == .active ? (statusFilter?.label ?? "All") : scope.label,
+                          systemImage: scope.systemImage)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
 
                 Spacer()
 
-                if store.data.templates.isEmpty {
+                if scope == .trash, !store.trashedInvoices.isEmpty {
+                    Button("Empty Trash", role: .destructive) {
+                        if let id = focus.invoiceID,
+                           store.invoice(id: id)?.isTrashed == true { focus.invoiceID = nil }
+                        store.emptyTrash()
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.red)
+                }
+
+                if scope == .trash {
+                    EmptyView()
+                } else if store.data.templates.isEmpty {
                     Button {
                         newInvoice()
                     } label: {
@@ -198,10 +310,11 @@ struct SidebarView: View {
     }
 
     private var summaryBar: some View {
-        let outstanding = store.data.invoices
+        // Archived and trashed invoices are not outstanding work.
+        let outstanding = store.activeInvoices
             .filter { $0.status != .paid }
             .reduce(Decimal(0)) { $0 + $1.amountDue }
-        let overdue = store.data.invoices.filter(\.isOverdue).count
+        let overdue = store.activeInvoices.filter(\.isOverdue).count
         return HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Outstanding")

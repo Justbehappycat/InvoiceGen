@@ -22,6 +22,17 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 - Status: Draft / Sent / Paid, with automatic overdue flagging. Change it from
   the sidebar's right-click menu; "Mark as Paid" also settles the amount (⌘Z
   puts both back).
+- **Archive and trash.** The filter menu switches the list between Invoices,
+  Archive and Trash, with a count beside each. Archiving sets an invoice
+  aside: it leaves the working list, stops counting toward the outstanding
+  total, and can never be flagged overdue — but it stays in the customer's
+  history, because the work still happened. The archive is filed by year,
+  newest first.
+- **Deleting is a move, not a destruction.** "Move to Trash" is reversible from
+  the trash long after the undo history is gone; only "Delete Permanently" and
+  "Empty Trash" actually remove anything. Trashed invoices drop out of customer
+  history and the totals. An invoice opened from either pile says where it is
+  and offers the way back.
 - The sidebar leads with what still needs doing: overdue first, then unpaid by
   soonest due date, then paid — visible and searchable, just sunk to the bottom.
 - "Today" beside the invoice date moves it to today and drags the due date with
@@ -272,6 +283,10 @@ changes the code, that a wrong passphrase is rejected, that the same passphrase
 and salt reproduce a code on another Mac, and that the rendered bars scan back
 to the code they encode. `--render-mock out.pdf` renders a sheet from invented
 data (no real customer, business or payment details) for reviewing layout.
+`--selftest-archive` checks that archiving removes an invoice from the working
+list but not from the customer's history, that deleting only moves it to the
+trash, that undo un-deletes, that emptying really removes, and that the archive
+groups by year newest-first.
 `--selftest-list` checks the sidebar ordering, the mark-as-paid gesture and its
 undo, and the payment-term arithmetic behind the Today button.
 `--selftest-columns [out.pdf]` renders the invoice with renamed and hidden

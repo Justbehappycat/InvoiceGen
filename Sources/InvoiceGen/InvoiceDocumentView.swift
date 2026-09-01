@@ -149,7 +149,7 @@ struct InvoiceDocumentView: View {
                             ? Color(nsColor: Verification.inkColor)
                             : Color(white: 0.45),
                         fontSize: 26,
-                        containedInLetters: business.verificationMarkContained
+                        containedInLetters: business.verificationMarkStyle == .letters
                     )
                     .padding(.top, 8)
                 }
@@ -196,7 +196,7 @@ struct InvoiceDocumentView: View {
                             stripTone: business.verificationStripInk
                                 ? Color(nsColor: Verification.inkColor)
                                 : accentDark,
-                            containedInLetters: business.verificationMarkContained
+                            containedInLetters: business.verificationMarkStyle == .letters
                         )
                         .padding(.leading, 44)
                         .padding(.bottom, 18)

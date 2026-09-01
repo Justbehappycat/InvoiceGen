@@ -355,7 +355,8 @@ struct InvoiceGenApp: App {
             business.verificationSalt = Data(repeating: 0x2A, count: 16)
             business.verificationPassphrase = "sample passphrase"
             business.verificationStripInk = args.contains("ink")
-            business.verificationMarkStyle = .banner
+            business.verificationMarkStyle = args.contains("strip") ? .strip : .banner
+            business.verificationStripInk = args.contains("ink")
             if let index = args.firstIndex(of: "tone"), index + 1 < args.count,
                let tone = Double(args[index + 1]) {
                 business.verificationBarTone = tone
@@ -432,7 +433,7 @@ struct InvoiceGenApp: App {
 
                 @MainActor func render(_ name: String, contained: Bool, ink: Bool) -> URL? {
                     var profile = business
-                    profile.verificationMarkContained = contained
+                    profile.verificationMarkStyle = contained ? .letters : .strip
                     profile.verificationStripInk = ink
                     guard let data = PDFExporter.makePDFData(
                         invoice: invoice, customer: customer, business: profile) else { return nil }
@@ -478,8 +479,9 @@ struct InvoiceGenApp: App {
                     let report = PDFVerifier.verify(url: url, key: key, invoices: [invoice])
                     let decoded = report.scannedCode
                     let label = name.padding(toLength: 11, withPad: " ", startingAt: 0)
+                    let payload = Verification.barcodePayload(for: code)
                     print("\(label) · bars decode:", decoded ?? "no",
-                          mustScan ? (decoded == code ? "ok" : "FAILED — this one must scan")
+                          mustScan ? (decoded == payload ? "ok" : "FAILED — this one must scan")
                                    : "(not required)")
                     print("\(label) · footer code read:", report.printedCode ?? "none",
                           report.printedCode == code ? "ok" : "FAILED")
@@ -645,6 +647,84 @@ struct InvoiceGenApp: App {
                 } else {
                     print("barcode round-trip: FAILED to render")
                 }
+            }
+            exit(0)
+        }
+        if args.contains("--selftest-archive") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            _ = NSApplication.shared
+            MainActor.assumeIsolated {
+                let store = AppStore.shared
+                waitForSecrets(store)
+                let liveBefore = store.activeInvoices.count
+
+                let invoice = store.newInvoice()
+                store.commitHistory()
+
+                store.setArchived(true, on: invoice.id)
+                print("archived leaves the working list:",
+                      store.activeInvoices.count == liveBefore
+                        && store.archivedInvoices.contains { $0.id == invoice.id } ? "yes" : "FAILED")
+                let archived = store.invoice(id: invoice.id)
+                print("archived is never overdue:", archived?.isOverdue == false ? "yes" : "FAILED")
+
+                store.setArchived(false, on: invoice.id)
+                print("un-archiving puts it back:",
+                      store.activeInvoices.count == liveBefore + 1 ? "yes" : "FAILED")
+
+                // Deleting is a move, not a destruction.
+                let total = store.data.invoices.count
+                _ = total
+                store.deleteInvoice(id: invoice.id)
+                print("delete moves to the trash:",
+                      store.data.invoices.count == total
+                        && store.trashedInvoices.contains { $0.id == invoice.id }
+                        && store.activeInvoices.count == liveBefore ? "yes" : "FAILED")
+                print("trashed invoice leaves customer history:",
+                      !store.invoices(for: invoice.customerID ?? UUID())
+                          .contains { $0.id == invoice.id } ? "yes" : "FAILED")
+
+                store.restoreFromTrash(id: invoice.id)
+                print("put back:", store.activeInvoices.contains { $0.id == invoice.id }
+                      ? "yes" : "FAILED")
+
+                store.deleteInvoice(id: invoice.id)
+                store.undo()
+                print("undo un-deletes:", store.invoice(id: invoice.id)?.isTrashed == false
+                      ? "yes" : "FAILED")
+
+                // Measure across the emptying itself: an undo earlier in this
+                // test can move the total, so counting from a number captured
+                // before it proves nothing.
+                if store.invoice(id: invoice.id) == nil {
+                    print("emptying the trash: SKIPPED — undo removed the test invoice")
+                } else {
+                    store.deleteInvoice(id: invoice.id)
+                    let trashedNow = store.trashedInvoices.count
+                    let countBefore = store.data.invoices.count
+                    store.emptyTrash()
+                    print("emptying the trash really removes it:",
+                          store.invoice(id: invoice.id) == nil
+                            && store.data.invoices.count == countBefore - trashedNow
+                            ? "yes (\(trashedNow) removed)" : "FAILED")
+                }
+
+                // The archive files by year, newest first.
+                var years: [Invoice] = []
+                for year in [2024, 2026, 2025] {
+                    var one = Invoice()
+                    one.issueDate = Calendar.current.date(
+                        from: DateComponents(year: year, month: 6, day: 1)) ?? Date()
+                    one.archivedAt = Date()
+                    years.append(one)
+                }
+                let grouped = Dictionary(grouping: years, by: \.year)
+                    .map(\.key).sorted(by: >)
+                print("archive years, newest first:", grouped,
+                      grouped == [2026, 2025, 2024] ? "ok" : "FAILED")
+
+                store.data.nextInvoiceNumber -= 1
+                store.saveNow()
             }
             exit(0)
         }

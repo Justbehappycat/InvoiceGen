@@ -234,6 +234,14 @@ struct Invoice: Identifiable, Codable, Hashable {
     var paymentMethods: [PaymentMethod] = []
     var columns: InvoiceColumns = InvoiceColumns()
 
+    /// Set aside: finished business, kept for the record but out of the way.
+    /// Archived invoices don't appear in the working list and don't count
+    /// toward the outstanding totals.
+    var archivedAt: Date?
+    /// In the trash. Nothing is destroyed until the trash is emptied, so a
+    /// mis-click costs nothing even after the undo history is gone.
+    var deletedAt: Date?
+
     var enabledPaymentMethods: [PaymentMethod] {
         paymentMethods.filter { $0.isEnabled && !($0.displayTitle.isEmpty && $0.filledFields.isEmpty) }
     }
@@ -242,6 +250,7 @@ struct Invoice: Identifiable, Codable, Hashable {
         case id, number, poNumber, title, customerID, issueDate, dueDate, items
         case discountIsPercent, discountValue, taxLabel, taxRate, amountPaid
         case notes, footerMessage, currencyCode, status, createdAt, paymentMethods, columns
+        case archivedAt, deletedAt
     }
 
     init() {}
@@ -268,6 +277,8 @@ struct Invoice: Identifiable, Codable, Hashable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         paymentMethods = try c.decodeIfPresent([PaymentMethod].self, forKey: .paymentMethods) ?? []
         columns = try c.decodeIfPresent(InvoiceColumns.self, forKey: .columns) ?? InvoiceColumns()
+        archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
+        deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
 
     // MARK: Totals
@@ -298,6 +309,11 @@ struct Invoice: Identifiable, Codable, Hashable {
 
     var amountDue: Decimal { (total - amountPaid).rounded(2) }
 
+    var isArchived: Bool { archivedAt != nil }
+    var isTrashed: Bool { deletedAt != nil }
+    /// The year an archived invoice is filed under.
+    var year: Int { Calendar.current.component(.year, from: issueDate) }
+
     /// Sidebar ordering: overdue first, then everything still owed, then paid.
     var sortRank: Int {
         if status == .paid { return 2 }
@@ -305,7 +321,8 @@ struct Invoice: Identifiable, Codable, Hashable {
     }
 
     var isOverdue: Bool {
-        status != .paid && amountDue > 0 && dueDate < Calendar.current.startOfDay(for: Date())
+        status != .paid && !isArchived && !isTrashed
+            && amountDue > 0 && dueDate < Calendar.current.startOfDay(for: Date())
     }
 }
 
