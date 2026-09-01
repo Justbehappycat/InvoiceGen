@@ -12,7 +12,10 @@ enum PDFExporter {
 
     /// Renders the invoice as vector PDF data, one US Letter sheet per page.
     @MainActor
-    static func makePDFData(invoice: Invoice, customer: Customer?, business: BusinessProfile) -> Data? {
+    static func makePDFData(
+        invoice: Invoice, customer: Customer?, business: BusinessProfile,
+        verificationCodeOverride: String? = nil
+    ) -> Data? {
         let specs = InvoicePaginator.pages(invoice: invoice, customer: customer, business: business)
 
         let output = NSMutableData()
@@ -23,9 +26,10 @@ enum PDFExporter {
               let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
 
         for spec in specs {
-            let view = InvoiceDocumentView(
+            var view = InvoiceDocumentView(
                 invoice: invoice, customer: customer, business: business, page: spec
             )
+            view.verificationCodeOverride = verificationCodeOverride
             let renderer = ImageRenderer(content: view)
             renderer.proposedSize = ProposedViewSize(width: InvoiceDocumentView.pageWidth, height: nil)
 

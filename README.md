@@ -48,9 +48,18 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   are filled with rows before the totals block moves to a sheet of its own.
 
 **Invoice verification**
-- Every invoice can carry a Code 128 barcode plus the same code in text
-  (`IG1-11-0BEDBC09`), printed on a light plate inside the banner so a scanner
-  can actually read it.
+- Every invoice can carry a Code 128 barcode. The bars print *in* the banner
+  colour — ink bars with transparent spaces, so the invoice's own field is the
+  light half of the symbol and the code reads as part of the design rather than
+  a sticker on top of it. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
+  quietly in the footer.
+- Whether bars can sit straight on a colour is a print question, so the app
+  measures print contrast signal — `(light − dark) / light`, the barcode
+  standards' own metric — against a 0.70 floor. Light and mid accents take the
+  bars directly; a genuinely dark accent gets a lighter band of the same colour
+  behind them, and Settings says which happened and at what contrast. (Vision
+  is not the arbiter here: it will decode black bars on a near-black field that
+  no laser scanner could read.)
 - The code is an HMAC-SHA256 signature over exactly four fields: invoice
   number, invoice date, total quantity, total amount. Change any one of them
   and the code stops verifying.
@@ -62,6 +71,17 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 - Verify with ⇧⌘V: scan the barcode (a handheld scanner types like a keyboard)
   or type the code. The app recomputes the signature from its own copy and
   reports genuine, mismatched, unknown, or malformed.
+- **Verify a PDF on its own terms** — "Choose PDF…" reads the bars, then reads
+  the invoice number, date, item count and total *off the page* and recomputes
+  the signature from those. So a PDF whose printed total was edited while the
+  barcode was left alone is caught, even for an invoice this Mac has never
+  seen. When the invoice is held here too, the app cross-checks and reports
+  drift separately: an intact sheet that no longer matches your copy means the
+  invoice was edited after it was sent, which is a different problem from a
+  forged sheet.
+- The signed date is the invoice's *local* calendar date, matching what the
+  sheet prints. Signing a UTC day would have made an evening invoice sign
+  tomorrow's date and every PDF check come back a false mismatch.
 - Changing the passphrase invalidates the codes on invoices already sent.
 
 **Payment methods**
@@ -182,6 +202,10 @@ And for checking layout at a given window size (writes a PNG of the real UI):
 ```
 
 The last argument is `invoices`, `customers`, `items`, `settings`, or `sidebar`.
+`--selftest-pdf` renders three sheets and checks the real attack: an intact PDF
+verifies, a PDF whose total was edited while keeping the original barcode is
+caught as tampered, an intact PDF whose invoice was edited afterwards is
+flagged as differing from the record, and a PDF with no code says so.
 `--selftest-verify` checks the signature end to end: that each signed field
 changes the code, that a wrong passphrase is rejected, that the same passphrase
 and salt reproduce a code on another Mac, and that the rendered bars scan back

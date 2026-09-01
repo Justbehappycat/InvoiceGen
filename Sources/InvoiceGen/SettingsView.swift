@@ -199,6 +199,8 @@ struct SettingsView: View {
                 Toggle("Print the barcode on invoices", isOn: business.printVerificationCode)
                     .disabled(!store.hasVerificationPassphrase)
 
+                contrastNote
+
                 if lock.isUnlocked {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                         GridRow {
@@ -248,6 +250,29 @@ struct SettingsView: View {
             .padding(6)
         } label: {
             Text("Invoice verification").font(.headline)
+        }
+    }
+
+    /// Whether the bars can print straight on the banner colour is a print
+    /// question, so the app measures it (print contrast signal, the barcode
+    /// standards' own metric) and says what it did.
+    private var contrastNote: some View {
+        let accent = NSColor(Color(hex: store.data.business.accentHex))
+        let contrast = Verification.printContrast(onField: accent)
+        let needsBand = Verification.guardBand(forField: accent) != nil
+        return HStack(alignment: .top, spacing: 6) {
+            Image(systemName: needsBand ? "square.on.square" : "checkmark.circle")
+                .foregroundColor(needsBand ? .orange : .secondary)
+            Text(needsBand
+                 ? "Your accent colour is too dark to print a readable barcode on "
+                   + "(contrast \(String(format: "%.2f", contrast)), needs "
+                   + "\(String(format: "%.2f", Verification.minimumContrast))), so a lighter band "
+                   + "of the same colour prints behind the bars."
+                 : "Bars print straight on your banner colour — contrast "
+                   + "\(String(format: "%.2f", contrast)), comfortably scannable.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

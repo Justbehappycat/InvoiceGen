@@ -59,13 +59,14 @@ enum Verification {
         return key
     }
 
-    static func cachedBarcode(for code: String, scale: CGFloat = 12) -> NSImage? {
+    static func cachedBarcode(for code: String, ink: NSColor = inkColor, scale: CGFloat = 12) -> NSImage? {
+        let id = "\(code)|\(ink.description)|\(scale)"
         cacheLock.lock()
         defer { cacheLock.unlock() }
-        if let cached = imageCache[code] { return cached }
-        guard let image = barcodeImage(for: code, scale: scale) else { return nil }
+        if let cached = imageCache[id] { return cached }
+        guard let image = barcodeImage(for: code, ink: ink, scale: scale) else { return nil }
         if imageCache.count > 40 { imageCache.removeAll() }
-        imageCache[code] = image
+        imageCache[id] = image
         return image
     }
 
@@ -93,10 +94,14 @@ enum Verification {
         invoice.items.reduce(Decimal(0)) { $0 + $1.quantity }
     }
 
+    /// Local time zone, deliberately: the signature has to cover the date the
+    /// invoice *prints*, and that's the sender's calendar day. Formatting an
+    /// evening timestamp in UTC would sign the following day and every PDF
+    /// check would come back a false mismatch.
     private static let isoFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
@@ -115,9 +120,19 @@ enum Verification {
 
     /// `IG1-11-4A7C9E2B` — prefix, invoice number, eight hex digits of HMAC.
     static func code(for invoice: Invoice, key: SymmetricKey) -> String {
-        let mac = HMAC<SHA256>.authenticationCode(for: Data(payload(for: invoice).utf8), using: key)
+        code(number: invoice.number, date: invoice.issueDate,
+             quantity: totalQuantity(of: invoice), total: invoice.total, key: key)
+    }
+
+    /// The same signature, from loose fields — this is what lets a PDF be
+    /// checked against its own printed numbers rather than against our copy.
+    static func code(number: String, date: Date, quantity: Decimal,
+                     total: Decimal, key: SymmetricKey) -> String {
+        let payload = [prefix, number, isoDate(date),
+                       decimalString(quantity), decimalString(total)].joined(separator: "|")
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(payload.utf8), using: key)
         let signature = Data(mac).prefix(4).map { String(format: "%02X", $0) }.joined()
-        return "\(prefix)-\(invoice.number)-\(signature)"
+        return "\(prefix)-\(number)-\(signature)"
     }
 
     enum Result: Equatable {
@@ -159,16 +174,87 @@ enum Verification {
     /// Code 128 via CoreImage — the system encoder, so the symbology, check
     /// digit and quiet zone are correct by construction rather than by my
     /// transcription of a pattern table.
-    static func barcodeImage(for code: String, scale: CGFloat = 12) -> NSImage? {
-        let filter = CIFilter.code128BarcodeGenerator()
-        filter.message = Data(code.utf8)
-        filter.quietSpace = 6
-        guard let output = filter.outputImage else { return nil }
-        let scaled = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let rep = NSCIImageRep(ciImage: scaled)
+    ///
+    /// The bars are drawn in `ink` with the spaces left *transparent*, so the
+    /// invoice's own field shows through as the light half of the symbol and
+    /// the code reads as part of the design rather than a sticker on top of it.
+    static func barcodeImage(for code: String, ink: NSColor = inkColor, scale: CGFloat = 12) -> NSImage? {
+        let generator = CIFilter.code128BarcodeGenerator()
+        generator.message = Data(code.utf8)
+        generator.quietSpace = 8
+        guard let generated = generator.outputImage else { return nil }
+
+        // Bars → opaque, spaces → transparent.
+        let invert = CIFilter.colorInvert()
+        invert.inputImage = generated
+        let toAlpha = CIFilter.maskToAlpha()
+        toAlpha.inputImage = invert.outputImage
+        guard let alpha = toAlpha.outputImage else { return nil }
+
+        let rgb = ink.usingColorSpace(.sRGB) ?? .black
+        let flat = CIImage(color: CIColor(red: rgb.redComponent,
+                                          green: rgb.greenComponent,
+                                          blue: rgb.blueComponent)).cropped(to: alpha.extent)
+        let blend = CIFilter.blendWithAlphaMask()
+        blend.inputImage = flat
+        blend.backgroundImage = CIImage.empty().cropped(to: alpha.extent)
+        blend.maskImage = alpha
+        guard let output = blend.outputImage else { return nil }
+
+        let rep = NSCIImageRep(ciImage: output.transformed(by: CGAffineTransform(scaleX: scale, y: scale)))
         let image = NSImage(size: rep.size)
         image.addRepresentation(rep)
         return image
+    }
+
+    // MARK: - Print contrast
+    //
+    // Whether bars can sit straight on a coloured field is a print question,
+    // not a "does Vision decode my anti-aliased PNG" question — Vision will
+    // happily read black bars on a near-black field that no laser scanner
+    // could. So the guard uses print contrast signal (PCS), the measure the
+    // barcode standards actually use: (light − dark) / light, on reflectance.
+
+    /// Near-black, a touch softer than pure ink so it sits in a greyscale design.
+    static let inkColor = NSColor(calibratedWhite: 0.06, alpha: 1)
+    private static let inkReflectance: Double = 0.06
+
+    /// ISO 15416 grade C and better starts around 0.70; anything under that is
+    /// a barcode that scans on a good day and fails in a warehouse.
+    static let minimumContrast: Double = 0.70
+    /// What a lightened band aims for — comfortably inside grade A.
+    private static let targetContrast: Double = 0.85
+
+    /// Perceived reflectance of a colour, 0…1 (luma — the eye's, and a
+    /// scanner's, weighting of the channels).
+    static func reflectance(of color: NSColor) -> Double {
+        let rgb = color.usingColorSpace(.sRGB) ?? .white
+        return 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+    }
+
+    static func printContrast(onField color: NSColor) -> Double {
+        let light = reflectance(of: color)
+        guard light > 0 else { return 0 }
+        return (light - inkReflectance) / light
+    }
+
+    /// Nil when the field is light enough to take bars directly. Otherwise the
+    /// colour of the band to lay behind them — the same hue, lifted toward
+    /// paper until the contrast is safe, so it still reads as the design.
+    static func guardBand(forField color: NSColor) -> NSColor? {
+        guard printContrast(onField: color) < minimumContrast else { return nil }
+        let needed = inkReflectance / (1 - targetContrast)          // reflectance to reach the target
+        let field = color.usingColorSpace(.sRGB) ?? .white
+        let current = reflectance(of: field)
+        guard current < needed else { return nil }
+        // Blend toward white by the fraction that lifts reflectance to `needed`.
+        let t = min(1.0, max(0.0, (needed - current) / max(0.0001, 1 - current)))
+        return NSColor(
+            srgbRed: field.redComponent + (1 - field.redComponent) * t,
+            green: field.greenComponent + (1 - field.greenComponent) * t,
+            blue: field.blueComponent + (1 - field.blueComponent) * t,
+            alpha: 1
+        )
     }
 }
 

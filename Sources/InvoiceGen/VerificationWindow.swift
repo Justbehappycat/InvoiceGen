@@ -7,6 +7,7 @@ struct VerifyInvoiceView: View {
     @EnvironmentObject var store: AppStore
     @State private var entry = ""
     @State private var result: Verification.Result?
+    @State private var pdfReport: PDFVerificationReport?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -32,10 +33,25 @@ struct VerifyInvoiceView: View {
                 resultPanel(result)
             }
 
+            Divider()
+
+            HStack(spacing: 10) {
+                Button("Choose PDF…") { choosePDF() }
+                Text("Checks the file itself: reads the bars, then re-reads the numbers "
+                     + "printed on the page and recomputes the signature from those.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let pdfReport {
+                pdfPanel(pdfReport)
+            }
+
             Spacer(minLength: 0)
         }
         .padding(20)
-        .frame(minWidth: 460, minHeight: 300)
+        .frame(minWidth: 460, minHeight: 420)
         .onChange(of: entry) { _ in result = nil }
     }
 
@@ -105,7 +121,80 @@ struct VerifyInvoiceView: View {
     }
 
     private func verify() {
+        pdfReport = nil
         result = store.verify(entry)
+    }
+
+    private func choosePDF() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose an invoice PDF to verify"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        result = nil
+        pdfReport = PDFVerifier.verify(url: url, store: store)
+    }
+
+    @ViewBuilder
+    private func pdfPanel(_ report: PDFVerificationReport) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch report.verdict {
+            case .genuine:
+                panel(icon: "checkmark.seal.fill", tint: .green,
+                      title: "\(report.fileName) is genuine",
+                      detail: "The numbers printed on the page reproduce the code the page carries"
+                        + (report.recordFound ? ", and they match the invoice held here." : "."))
+            case .tampered:
+                panel(icon: "exclamationmark.triangle.fill", tint: .red,
+                      title: "\(report.fileName) does not match its own code",
+                      detail: "The invoice number, date, item count or total on this page has been "
+                        + "changed since it was signed — or it was signed with a different passphrase.")
+            case .differsFromRecord:
+                panel(icon: "exclamationmark.circle.fill", tint: .orange,
+                      title: "Page is internally consistent, but differs from our copy",
+                      detail: report.differencesFromRecord.joined(separator: "; ")
+                        + ". The PDF is intact, so the invoice was probably edited here after it was sent.")
+            case .noCode:
+                panel(icon: "barcode.viewfinder", tint: .orange,
+                      title: "No verification code on that PDF",
+                      detail: "Neither a barcode nor a printed code was found — it may pre-date "
+                        + "verification, or have been produced with the code switched off.")
+            case .unreadable:
+                panel(icon: "questionmark.circle.fill", tint: .orange,
+                      title: "Couldn't check \(report.fileName)",
+                      detail: report.notes.joined(separator: " "))
+            }
+
+            // What the page says, in the app's own words, so a mismatch is
+            // legible rather than a verdict you have to take on faith.
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+                if let code = report.scannedCode ?? report.printedCode {
+                    GridRow { Text("Code").gridColumnAlignment(.trailing); Text(code).monospaced() }
+                }
+                if let number = report.number {
+                    GridRow { Text("Number").gridColumnAlignment(.trailing); Text(number) }
+                }
+                if let date = report.date {
+                    GridRow { Text("Date").gridColumnAlignment(.trailing); Text(Fmt.longDate(date)) }
+                }
+                if let quantity = report.quantity {
+                    GridRow { Text("Items").gridColumnAlignment(.trailing); Text(Fmt.quantity(quantity)) }
+                }
+                if let total = report.total {
+                    GridRow {
+                        Text("Total").gridColumnAlignment(.trailing)
+                        Text(Fmt.currency(total, code: store.data.business.currencyCode))
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+
+            ForEach(report.notes, id: \.self) { note in
+                Text(note).font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
@@ -121,10 +210,10 @@ final class VerifyWindowController: NSObject, NSWindowDelegate {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let size = NSSize(width: 520, height: 360)
+        let size = NSSize(width: 560, height: 560)
         let root = VerifyInvoiceView()
             .environmentObject(store)
-            .frame(minWidth: 460, idealWidth: size.width, minHeight: 300, idealHeight: size.height)
+            .frame(minWidth: 460, idealWidth: size.width, minHeight: 420, idealHeight: size.height)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .resizable],

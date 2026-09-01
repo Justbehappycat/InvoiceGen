@@ -399,6 +399,89 @@ struct InvoiceGenApp: App {
             }
             exit(1)
         }
+        if args.contains("--selftest-pdf") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            _ = NSApplication.shared
+            MainActor.assumeIsolated {
+                let salt = Data(repeating: 0x2A, count: 16)
+                guard let key = Verification.cachedKey(passphrase: "sample passphrase", salt: salt)
+                else { print("no key — FAILED"); exit(1) }
+
+                var business = BusinessProfile()
+                business.name = "Northwind Studio LLC"
+                business.verificationSalt = salt
+                business.verificationPassphrase = "sample passphrase"
+                var customer = Customer(); customer.name = "Harbour Coffee Roasters"
+
+                var invoice = Invoice()
+                invoice.number = "11"
+                invoice.items = [
+                    LineItem(title: "Brand film", details: "", quantity: 1, price: 4200),
+                    LineItem(title: "Cutdowns", details: "", quantity: 6, price: 180),
+                ]
+                let genuineCode = Verification.code(for: invoice, key: key)
+                let dir = FileManager.default.temporaryDirectory
+
+                @MainActor func write(_ invoice: Invoice, override: String?, to name: String) -> URL? {
+                    guard let data = PDFExporter.makePDFData(
+                        invoice: invoice, customer: customer, business: business,
+                        verificationCodeOverride: override
+                    ) else { return nil }
+                    let url = dir.appendingPathComponent(name)
+                    try? data.write(to: url)
+                    return url
+                }
+
+                // 1. An untouched invoice.
+                guard let clean = write(invoice, override: nil, to: "ig-clean.pdf") else {
+                    print("render FAILED"); exit(1)
+                }
+                var report = PDFVerifier.verify(url: clean, key: key, invoices: [invoice])
+                print("clean PDF:")
+                print("  bars decoded:", report.scannedCode ?? "none",
+                      report.scannedCode == genuineCode ? "ok" : "FAILED")
+                print("  read off the page: number=\(report.number ?? "-") "
+                      + "date=\(report.date.map(Verification.isoDate) ?? "-") "
+                      + "items=\(report.quantity.map { "\($0)" } ?? "-") "
+                      + "total=\(report.total.map { "\($0)" } ?? "-")")
+                print("  verdict:", "\(report.verdict)",
+                      report.verdict == .genuine ? "ok" : "FAILED")
+
+                // 2. The attack: page edited, original barcode left in place.
+                var edited = invoice
+                edited.items[0].price = 9200          // someone raises the total
+                guard let forged = write(edited, override: genuineCode, to: "ig-forged.pdf") else {
+                    print("render FAILED"); exit(1)
+                }
+                report = PDFVerifier.verify(url: forged, key: key, invoices: [invoice])
+                print("edited PDF, original barcode:")
+                print("  page total read as:", report.total.map { "\($0)" } ?? "-")
+                print("  self-consistent:", report.pageIsSelfConsistent.map { "\($0)" } ?? "-")
+                print("  verdict:", "\(report.verdict)",
+                      report.verdict == .tampered ? "caught" : "MISSED — FAILED")
+
+                // 3. Intact sheet, but our own copy has moved on since sending.
+                var changedRecord = invoice
+                changedRecord.items[0].price = 4500
+                report = PDFVerifier.verify(url: clean, key: key, invoices: [changedRecord])
+                print("intact PDF vs an invoice edited after sending:")
+                print("  verdict:", "\(report.verdict)",
+                      report.verdict == .differsFromRecord ? "flagged" : "FAILED")
+                print("  difference:", report.differencesFromRecord.first ?? "none")
+
+                // 4. A PDF with no code at all.
+                business.printVerificationCode = false
+                guard let plain = write(invoice, override: nil, to: "ig-plain.pdf") else { exit(1) }
+                report = PDFVerifier.verify(url: plain, key: key, invoices: [invoice])
+                print("PDF without a code:", "\(report.verdict)",
+                      report.verdict == .noCode ? "reported" : "FAILED")
+
+                for name in ["ig-clean.pdf", "ig-forged.pdf", "ig-plain.pdf"] {
+                    try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+                }
+            }
+            exit(0)
+        }
         if args.contains("--selftest-verify") {
             setvbuf(stdout, nil, _IONBF, 0)
             _ = NSApplication.shared

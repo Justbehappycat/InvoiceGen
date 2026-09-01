@@ -9,6 +9,9 @@ struct InvoiceDocumentView: View {
     let business: BusinessProfile
     var page: InvoicePageSpec
     var padToPageHeight: Bool = true
+    /// Test hook: prints this code instead of the one the invoice signs to,
+    /// which is how `--selftest-pdf` forges "edited page, original barcode".
+    var verificationCodeOverride: String?
 
     init(
         invoice: Invoice,
@@ -35,6 +38,7 @@ struct InvoiceDocumentView: View {
     /// business hasn't switched it off. Derived from the business profile the
     /// view already holds, so pagination measures the real thing.
     private var verificationCode: String? {
+        if let verificationCodeOverride { return verificationCodeOverride }
         guard business.printVerificationCode,
               let key = Verification.cachedKey(
                   passphrase: business.verificationPassphrase,
@@ -108,12 +112,9 @@ struct InvoiceDocumentView: View {
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
                     if let verificationCode {
-                        // The bars need a light field and a quiet zone to
-                        // scan, so they sit on a paper strip inside the banner
-                        // rather than over the accent colour.
-                        barcodeStrip(verificationCode)
+                        barcodeStrip(verificationCode, field: accent)
                             .padding(.leading, 44)
-                            .padding(.top, 12)
+                            .padding(.top, 14)
                     }
                     Spacer(minLength: 0)
                     Text(invoice.title.isEmpty ? "INVOICE" : invoice.title)
@@ -167,7 +168,7 @@ struct InvoiceDocumentView: View {
                 }
                 Rectangle().fill(accent).frame(height: 3)
                 if let verificationCode {
-                    barcodeStrip(verificationCode).padding(.top, 8)
+                    barcodeStrip(verificationCode, field: .white).padding(.top, 8)
                 }
             }
             .padding(.horizontal, 44)
@@ -175,32 +176,42 @@ struct InvoiceDocumentView: View {
         }
     }
 
-    /// Code 128 bars plus the same code in text, so an invoice can be checked
-    /// with a scanner or read down a phone line.
-    private func barcodeStrip(_ code: String) -> some View {
-        HStack(alignment: .center, spacing: 10) {
+    /// The bars sit straight on the invoice's own colour field — no plate, no
+    /// sticker. A band appears behind them only when the accent is too dark to
+    /// print a readable symbol, and `Verification.guardBand` decides that by
+    /// print contrast rather than by eye.
+    private func barcodeStrip(_ code: String, field: Color) -> some View {
+        let fieldColor = NSColor(field)
+        let band = Verification.guardBand(forField: fieldColor)
+        return Group {
             if let image = Verification.cachedBarcode(for: code) {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.none)          // never blur a barcode
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 26)
-            }
-            VStack(alignment: .leading, spacing: 0) {
-                Text("VERIFICATION")
-                    .font(.system(size: 6))
-                    .tracking(0.6)
-                    .foregroundColor(Color(white: 0.45))
-                Text(code)
-                    .font(.system(size: 8.5, design: .monospaced))
-                    .foregroundColor(.black)
+                    // Stretched to a fixed plate rather than fitted: every
+                    // module widens by the same factor, which a scanner is
+                    // happy with, and the symbol starts exactly on the margin.
+                    .frame(width: 232, height: 30)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Color.white)
-        .cornerRadius(3)
-        .fixedSize()   // a plate that hugs the bars, not a full-width band
+        .padding(.horizontal, band == nil ? 0 : 8)
+        .padding(.vertical, band == nil ? 0 : 4)
+        .background(band.map { Color(nsColor: $0) })
+        .cornerRadius(band == nil ? 0 : 2)
+    }
+
+    /// The readable form of the code, for reading down a phone line, plus the
+    /// signed item count — the one signed field the printed sheet doesn't
+    /// otherwise state, which is what makes a PDF checkable on its own.
+    private var verificationFooterLine: some View {
+        Group {
+            if let verificationCode {
+                Text("Verification \(verificationCode) · "
+                     + "\(Fmt.quantity(Verification.totalQuantity(of: invoice))) items")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(Color(white: 0.45))
+            }
+        }
     }
 
     private var continuationHeader: some View {
@@ -481,6 +492,7 @@ struct InvoiceDocumentView: View {
                     ForEach(Array(business.addressLines.enumerated()), id: \.offset) { _, line in
                         Text(line).font(.system(size: 11))
                     }
+                    verificationFooterLine.padding(.top, 3)
                 }
                 .foregroundColor(.black)
 
