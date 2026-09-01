@@ -1,0 +1,11 @@
+# Swift build products
+.build/
+build/
+
+# macOS
+.DS_Store
+
+# Saved reference copy of the Wave web app (11 MB of third-party assets,
+# kept locally as design reference — not part of the source).
+Wave • Finecut Studio LLC • Invoices.html
+Wave • Finecut Studio LLC • Invoices_files/

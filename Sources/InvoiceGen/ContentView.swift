@@ -1,0 +1,152 @@
+import SwiftUI
+
+struct ContentView: View {
+    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var focus: AppFocus
+
+    @State private var section: SidebarSection
+    @State private var search = ""
+    @State private var statusFilter: InvoiceStatus?
+    @State private var showVaultAlert = false
+
+    init(initialSection: SidebarSection = .invoices) {
+        _section = State(initialValue: initialSection)
+    }
+
+    var body: some View {
+        NavigationSplitView {
+            SidebarView(section: $section, search: $search, statusFilter: $statusFilter)
+                .navigationSplitViewColumnWidth(min: 244, ideal: 288, max: 420)
+        } detail: {
+            detail
+                .frame(minWidth: 820)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .alert("Payment details couldn't be verified", isPresented: $showVaultAlert) {
+            Button("Open Settings") {
+                SettingsWindowController.shared.show(store: store, focus: focus)
+            }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text(store.vaultStatus.message
+                 + "\n\nThey have been left off your invoices until you sort it out in Settings ▸ Security.")
+        }
+        .task {
+            if store.vaultStatus.isTrouble { showVaultAlert = true }
+        }
+        .onChange(of: focus.requestedSection) { newValue in
+            if let newValue {
+                section = newValue
+                focus.requestedSection = nil
+            }
+        }
+    }
+
+    // MARK: - Detail
+
+    @ViewBuilder
+    private var detail: some View {
+        switch section {
+        case .invoices:
+            if let id = focus.invoiceID, let binding = store.binding(invoiceID: id) {
+                InvoiceEditorView(invoice: binding)
+                    .id(id)
+            } else {
+                EmptyStateView(
+                    systemImage: "doc.text",
+                    title: "No invoice selected",
+                    message: "Pick an invoice on the left, or press ⌘N to start a new one."
+                )
+            }
+        case .customers:
+            if let id = focus.customerID, let binding = store.binding(customerID: id) {
+                CustomerDetailView(customer: binding)
+                    .id(id)
+            } else {
+                EmptyStateView(
+                    systemImage: "person.2",
+                    title: "No customer selected",
+                    message: "Customers you save here are remembered and reusable on every invoice."
+                )
+            }
+        case .items:
+            CatalogView()
+        case .settings:
+            SettingsView()
+        }
+    }
+}
+
+struct InvoiceRow: View {
+    let invoice: Invoice
+    let customer: Customer?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("#\(invoice.number)").font(.body.weight(.semibold))
+                    Text(customer?.displayName ?? "No customer")
+                        .font(.body)
+                        .foregroundColor(customer == nil ? .secondary : .primary)
+                        .lineLimit(1)
+                }
+                Text("Due \(Fmt.shortDate(invoice.dueDate))")
+                    .font(.caption)
+                    .foregroundColor(invoice.isOverdue ? .orange : .secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(Fmt.currency(invoice.total, code: invoice.currencyCode))
+                    .font(.callout.weight(.medium))
+                StatusChip(status: invoice.status, overdue: invoice.isOverdue)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+struct StatusChip: View {
+    let status: InvoiceStatus
+    var overdue: Bool = false
+
+    private var color: Color {
+        if overdue { return .orange }
+        switch status {
+        case .draft: return .gray
+        case .sent: return .blue
+        case .paid: return .green
+        }
+    }
+
+    var body: some View {
+        Text(overdue ? "Overdue" : status.label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.18), in: Capsule())
+            .foregroundColor(color)
+    }
+}
+
+struct EmptyStateView: View {
+    let systemImage: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 40))
+                .foregroundColor(.secondary)
+            Text(title).font(.title3.weight(.semibold))
+            Text(message)
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.3))
+    }
+}

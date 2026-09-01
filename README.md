@@ -1,0 +1,194 @@
+# InvoiceGen
+
+A standalone, fully offline macOS app for making invoices in the same layout as the
+Wave invoice this was modelled on. No account, no network, no subscription — all data
+lives in a single JSON file on your Mac.
+
+## Build & install
+
+```bash
+./build.sh
+cp -R build/InvoiceGen.app /Applications/
+```
+
+Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
+
+## What it does
+
+**Invoices**
+- Banner template matching the sample invoice (accent color configurable) plus a Minimal template.
+- Line items with description, quantity, price, per-line taxable flag.
+- Discount (flat or %), tax at any rate, partial payments, amount due.
+- Status: Draft / Sent / Paid, with automatic overdue flagging.
+- Duplicate any invoice, save one as a named template, or apply a template to the
+  invoice you're editing (Reuse menu).
+- Templates carry items, terms, tax, notes and payment details — not the customer
+  or the dates. Start one from the sidebar's New menu; manage them in the Library.
+- Undo/redo (⌘Z / ⇧⌘Z) across every edit, with edits made in a burst collapsed
+  into a single step.
+- Live page preview beside the editor, paginated exactly like the exported PDF.
+  Toggle with ⇧⌘P; the choice sticks across invoices and relaunches, and hiding
+  it skips the preview's layout work entirely.
+- Line item columns are yours: rename them (Items / Products / Services,
+  Quantity / Hours / Days, Price / Rate, Amount) and keep any of quantity,
+  price, amount or the per-item description off the printed page — useful for
+  flat-fee work where "1 × $2,500" says nothing. Set business-wide defaults in
+  Settings, override per invoice from the Columns button above the items. The
+  item column itself always prints, hidden columns stay editable, and totals
+  always use quantity × price.
+- Export PDF (⌘E) or Print (⌘P). Files are named `Invoice_<number>_<due date>.pdf`.
+- Long invoices paginate onto real US Letter sheets — line items are never split
+  across a page break, continuation pages repeat the column headers, and pages
+  are filled with rows before the totals block moves to a sheet of its own.
+
+**Payment methods**
+- Structured, not a notes blob: each method has a badge, a label, and label/value
+  fields (Zelle ID, account number, routing number, handle, …).
+- Kinds: Zelle, Bank Transfer, Wire, PayPal, Venmo, Cash App, Check, Card, Crypto, Other.
+- Fields are per-kind and realistic: Zelle takes an ID (email/phone) and a name,
+  PayPal an email, Venmo a handle, Cash App a cashtag — only Bank Transfer and
+  Wire ask for account/routing/SWIFT. Changing a method's kind drops the old
+  kind's fields instead of stacking them up (⌘Z if that was a misclick).
+- Each kind defines required fields.
+  They can be left blank, but they can't be deleted or relabelled — the same rule
+  applies to the last line item on an invoice.
+- Bank methods can take a badge for 20 common US banks (Chase, BofA, Wells Fargo,
+  Citi, U.S. Bank, PNC, Capital One, TD, Truist, Schwab, Ally, Amex, Discover,
+  Navy Federal, Fifth Third, Regions, Citizens, HSBC, Mercury, Chime).
+- Badges are drawn from a tint + glyph — they are *not* official brand artwork.
+  Drop a real logo onto any method with "Choose logo image…" if you want the
+  genuine mark.
+- Business-wide defaults live in Settings; every invoice keeps its own copy, so
+  changing an old invoice never rewrites history. "Use defaults" re-syncs one.
+- They render on the invoice in a compact two-column "HOW TO PAY" block.
+
+**How payment details are protected**
+- They are never written to `data.json`. They live in `vault.dat`, sealed with
+  AES-256-GCM under a key created in your login Keychain (`WhenUnlockedThisDeviceOnly`),
+  file mode 0600.
+- Editing them requires authentication (Touch ID or your login password). Until
+  then they are shown masked and read-only, and re-lock after 5 minutes.
+- Tampering is detected, not ignored: the GCM tag catches any edit to the
+  ciphertext, and a SHA-256 fingerprint kept beside the key catches a rollback to
+  an older genuine vault or an outright deletion. On any failure the app refuses
+  to put payment details on an invoice and says why — it never quietly prints
+  someone else's account number.
+- Settings ▸ Security shows the current state and an audit trail of when payment
+  details changed.
+- Backups exclude payment details unless you explicitly opt in (and authenticate).
+- If the Keychain is unreachable — most often because the app was rebuilt or
+  re-signed, since Keychain ACLs follow the signing identity — the key falls back
+  to a 0600 file beside the data and Settings says so. That still encrypts the
+  file at rest, but anything running as your user could read that key; a properly
+  signed build keeps the key in the Keychain.
+
+**Customers**
+- Saved once and reused; each has address, contact, email, phone, internal notes.
+- Per-customer history: every invoice, its status, and total billed.
+- "New invoice for this customer" from the customer screen or the sidebar context menu.
+
+**Library** (bottom of the sidebar)
+- Invoice templates, and a library of reusable services/products with default prices.
+- Add to any invoice from the "Add saved item" menu, or push a line item into the
+  library with "Save to items library".
+
+**Settings**
+- Opens with ⌘, as a normal macOS Settings window — it is set-up, not daily work.
+- Business name, address, phone, email, website, logo.
+- Default payment methods.
+- Accent color, template style, default currency, default payment terms.
+- Default notes/terms (anything beyond payment details) and footer message — new
+  invoices start from these.
+- Next invoice number, data-file location, backup and restore.
+
+## Data
+
+Everything is stored at:
+
+```
+~/Library/Application Support/InvoiceGen/data.json
+```
+
+Saved automatically as you type. Use **File ▸ Back Up Data…** for a copy, and
+**Restore From Backup…** to load one. Point the app at a different file (e.g. in
+Dropbox) by setting `INVOICEGEN_DATA=/path/to/data.json` in the environment.
+
+The sidebar carries the two day-to-day sections (Invoices, Customers). Saved
+items sits in the bar at the bottom of the sidebar, and Settings is the standard
+⌘, window.
+
+Data files written by older builds are migrated on open: payment details that
+lived in the notes field become structured payment methods, and the file is
+rewritten in the new form. Missing keys always fall back to defaults rather than
+failing the load.
+
+On first launch the app seeds itself with the business details, logo, payment terms,
+customer, and invoice #8 from the sample invoice, with the next number set to 9.
+All of it is editable.
+
+## Layout of the code
+
+| File | Purpose |
+| --- | --- |
+| `Models.swift` | Invoice, Customer, LineItem, BusinessProfile, totals math |
+| `Store.swift` | JSON persistence, autosave, CRUD, backup/restore |
+| `ContentView.swift` | Sidebar, lists, filtering, search |
+| `InvoiceEditorView.swift` | Invoice editor + live preview |
+| `CustomerDetailView.swift` | Customer record and history |
+| `CatalogView.swift` | Saved items library |
+| `SettingsView.swift` | Business profile, branding, defaults |
+| `InvoiceDocumentView.swift` | The printable sheet |
+| `Paginator.swift` | Measures pages so rows don't split |
+| `PDFExport.swift` | Vector PDF generation, save panel, printing |
+| `SidebarView.swift` | Invoice/customer lists and section switcher |
+| `InvoiceColumns.swift` | Line item column titles, visibility, shared editor |
+| `PaymentMethod.swift` | Payment method model, kinds and badge |
+| `PaymentMethodsEditor.swift` | Shared editor for defaults and per-invoice |
+| `UIShot.swift` | Offscreen UI capture used to check layout |
+
+Handy for checking output without opening the UI:
+
+```bash
+.build/debug/InvoiceGen --render-sample /tmp/out.pdf
+```
+
+And for checking layout at a given window size (writes a PNG of the real UI):
+
+```bash
+.build/debug/InvoiceGen --render-ui /tmp/ui.png 1440 900 invoices
+```
+
+The last argument is `invoices`, `customers`, `items`, `settings`, or `sidebar`.
+`--selftest-columns [out.pdf]` renders the invoice with renamed and hidden
+columns and checks the printed text, including that a pre-feature data file
+still loads with every column visible.
+`--measure-pages` prints the measured height of each candidate page, which is how
+pagination problems get diagnosed. `--selftest-undo` exercises the undo stack and `--selftest-payment` the
+payment-field rules.
+
+`--profile` times the things that were actually slow: the first Keychain read,
+a vault load, a save, pagination cold and warm, one rendered page, and a full
+window redraw with the preview shown and hidden.
+
+The live preview never puts `.shadow()` on the invoice itself — the shadow goes
+on a plain rectangle behind it. Shadowing the live view makes AppKit rasterise
+and blur the entire page on every redraw (measured: 360ms per page, so ~640ms
+to redraw the window against 42ms without), which is exactly what happens when
+you switch to the app and every control repaints in its active state.
+
+The first Keychain read in a freshly signed build costs several seconds while
+macOS evaluates the new signature against the key's ACL; every later read is
+~2ms. Re-signing (which `build.sh` does on every build) resets that. So the
+vault is opened on a background queue and folded into the data already on
+screen — `store init: 1.2 ms` instead of 3.4 s, with payment details arriving
+~50ms later warm, or after that one slow evaluation on the first run of a new
+build. Until it opens, `saveNow()` writes data.json only and never touches
+`vault.dat`, and anything already in memory (a migrated file, or an edit made
+in the meantime) wins over what the vault holds. `--selftest-lazy-vault` checks
+all of that.
+
+Pagination measurements are memoised and run off the view-update path (debounced
+200ms), because laying out a page costs a few milliseconds and doing that inside
+`body` made every keystroke and selection change feel sluggish.
+The window's minimum size is 1120×640 — that is the width at which the editor
+form, the preview, and the sidebar all fit without clipping.
