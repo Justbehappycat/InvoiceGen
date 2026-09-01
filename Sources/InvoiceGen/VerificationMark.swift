@@ -42,6 +42,12 @@ struct VerificationMark: View {
     /// every column across the join — gap meets gap, bar meets bar — and ramp
     /// from the strip's tone to the letters' ink so the colour doesn't step
     /// either.
+    /// When true the mark is exactly the word: the code is cut into the
+    /// letterforms and nothing extends past them — no risers standing in the
+    /// tracking gaps, no strip below the baseline. Nothing sticks out, and the
+    /// price is that it is no longer a valid symbol: Code 128 needs every
+    /// column present, and the gaps between letters delete some.
+    var containedInLetters: Bool = true
     var riser: CGFloat = 0.45
     /// How far the foot of the bars melts back into the surface, in points.
     /// Without it the mark ends on a ruled edge and reads as a word sitting on
@@ -52,7 +58,7 @@ struct VerificationMark: View {
     private var capHeight: CGFloat { font.capHeight }
     private var geometry: (path: CGPath, width: CGFloat) { Self.glyphPath(title, font: font, tracking: tracking) }
 
-    var height: CGFloat { capHeight + strip }
+    var height: CGFloat { containedInLetters ? capHeight : capHeight + strip }
     var width: CGFloat { geometry.width }
 
     var body: some View {
@@ -74,18 +80,20 @@ struct VerificationMark: View {
             // word parked on top of a barcode.
             let riserHeight = fadeHeight * riser
             var body = letters
-            for (index, isBar) in modules.enumerated() where isBar {
-                body.addRect(CGRect(x: CGFloat(index) * moduleWidth,
-                                    y: baselineY - riserHeight,
-                                    width: moduleWidth,
-                                    height: riserHeight + strip))
+            if !containedInLetters {
+                for (index, isBar) in modules.enumerated() where isBar {
+                    body.addRect(CGRect(x: CGFloat(index) * moduleWidth,
+                                        y: baselineY - riserHeight,
+                                        width: moduleWidth,
+                                        height: riserHeight + strip))
+                }
             }
             context.fill(
                 body,
                 with: .linearGradient(
                     Gradient(colors: [ink, stripTone]),
                     startPoint: CGPoint(x: 0, y: 0),
-                    endPoint: CGPoint(x: 0, y: baselineY + strip)
+                    endPoint: CGPoint(x: 0, y: containedInLetters ? baselineY : baselineY + strip)
                 )
             )
 
@@ -103,7 +111,7 @@ struct VerificationMark: View {
 
             // The foot melts back into the surface, so the mark has no ruled
             // bottom edge to give away where it was pasted on.
-            if meltFoot > 0 {
+            if meltFoot > 0 && !containedInLetters {
                 let foot = CGRect(x: -1, y: baselineY + strip - meltFoot,
                                   width: word.width + 2, height: meltFoot + 1)
                 context.fill(

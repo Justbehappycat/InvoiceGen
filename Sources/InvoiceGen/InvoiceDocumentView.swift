@@ -130,7 +130,8 @@ struct InvoiceDocumentView: View {
                             field: accent,
                             stripTone: business.verificationStripInk
                                 ? Color(nsColor: Verification.inkColor)
-                                : accentDark
+                                : accentDark,
+                            containedInLetters: business.verificationMarkContained
                         )
                         .padding(.leading, 44)
                         .padding(.bottom, 18)
@@ -195,7 +196,8 @@ struct InvoiceDocumentView: View {
                         stripTone: business.verificationStripInk
                             ? Color(nsColor: Verification.inkColor)
                             : Color(white: 0.45),
-                        fontSize: 26
+                        fontSize: 26,
+                        containedInLetters: business.verificationMarkContained
                     )
                     .padding(.top, 8)
                 }

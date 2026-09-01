@@ -425,31 +425,42 @@ struct InvoiceGenApp: App {
                              Verification.printContrast(bars: Verification.inkColor, onField: accent),
                              Verification.minimumContrast))
 
-                @MainActor func render(ink: Bool) -> URL? {
+                @MainActor func render(_ name: String, contained: Bool, ink: Bool) -> URL? {
                     var profile = business
+                    profile.verificationMarkContained = contained
                     profile.verificationStripInk = ink
                     guard let data = PDFExporter.makePDFData(
                         invoice: invoice, customer: customer, business: profile) else { return nil }
                     let url = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("ig-mark-\(ink ? "ink" : "quiet").pdf")
+                        .appendingPathComponent("ig-mark-\(name).pdf")
                     try? data.write(to: url)
                     return url
                 }
 
-                for ink in [true, false] {
-                    guard let url = render(ink: ink) else { print("render FAILED"); exit(1) }
+                // (label, contained, ink strip, must the bars decode?)
+                let cases: [(String, Bool, Bool, Bool)] = [
+                    ("contained", true,  false, false),   // the word alone — decorative by design
+                    ("strip-ink", false, true,  true),    // a working symbol
+                    ("strip-quiet", false, false, false), // present, but under the contrast floor
+                ]
+                for (name, contained, ink, mustScan) in cases {
+                    guard let url = render(name, contained: contained, ink: ink) else {
+                        print("render FAILED"); exit(1)
+                    }
                     let report = PDFVerifier.verify(url: url, key: key, invoices: [invoice])
-                    let label = ink ? "ink  " : "quiet"
-                    print("\(label) · bars decode:", report.scannedCode ?? "no",
-                          ink ? (report.scannedCode == code ? "ok" : "FAILED — ink must scan")
-                              : "(expected: decorative)")
+                    let decoded = report.scannedCode
+                    let label = name.padding(toLength: 11, withPad: " ", startingAt: 0)
+                    print("\(label) · bars decode:", decoded ?? "no",
+                          mustScan ? (decoded == code ? "ok" : "FAILED — this one must scan")
+                                   : "(not required)")
                     print("\(label) · footer code read:", report.printedCode ?? "none",
                           report.printedCode == code ? "ok" : "FAILED")
                     print("\(label) · verdict:", "\(report.verdict)",
                           report.verdict == .genuine ? "ok" : "FAILED")
                     try? FileManager.default.removeItem(at: url)
                 }
-                print("A quiet strip still verifies: the PDF check falls back to the printed code.")
+                print("Every style verifies: when the bars can't be read the PDF check falls "
+                      + "back to the code printed in the footer.")
             }
             exit(0)
         }

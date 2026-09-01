@@ -199,14 +199,23 @@ struct SettingsView: View {
                 Toggle("Print the barcode on invoices", isOn: business.printVerificationCode)
                     .disabled(!store.hasVerificationPassphrase)
 
-                Picker("Strip under the title", selection: business.verificationStripInk) {
-                    Text("Quiet — matches the banner").tag(false)
-                    Text("Ink — readable by a scanner").tag(true)
+                Picker("The mark", selection: business.verificationMarkContained) {
+                    Text("Inside the letters — nothing sticks out").tag(true)
+                    Text("With a strip below — stays a working barcode").tag(false)
                 }
                 .pickerStyle(.radioGroup)
                 .disabled(!store.hasVerificationPassphrase)
 
-                contrastNote
+                if !store.data.business.verificationMarkContained {
+                    Picker("Strip tone", selection: business.verificationStripInk) {
+                        Text("Quiet — matches the banner").tag(false)
+                        Text("Ink — readable by a scanner").tag(true)
+                    }
+                    .pickerStyle(.radioGroup)
+                    .padding(.leading, 16)
+                }
+
+                markNote
 
                 if lock.isUnlocked {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
@@ -265,6 +274,27 @@ struct SettingsView: View {
     /// standards' own metric) and says what it did.
     /// Print contrast signal is the barcode standards' own metric, so the app
     /// measures it and says plainly what the chosen tone can and can't do.
+    /// Says what the chosen mark can actually do, rather than implying a
+    /// barcode that isn't one.
+    @ViewBuilder
+    private var markNote: some View {
+        if store.data.business.verificationMarkContained {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "textformat").foregroundColor(.secondary)
+                Text("The code is cut into the letterforms and nothing extends past them. "
+                     + "This is a brand mark, not a scannable symbol — Code 128 needs every "
+                     + "column, and the gaps between letters delete some. Verification is "
+                     + "unaffected: the code prints in the footer, and dropping the PDF here "
+                     + "still checks the page against it.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            contrastNote
+        }
+    }
+
     private var contrastNote: some View {
         let business = store.data.business
         let field = NSColor(Color(hex: business.accentHex))

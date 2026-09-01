@@ -48,13 +48,20 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   are filled with rows before the totals block moves to a sheet of its own.
 
 **Invoice verification**
-- The invoice title *is* the mark: solid at the top, combing open into the
-  verification code at its foot, with the same columns continuing below the
-  baseline as a strip. The cuts sit exactly on the pattern's *space* columns,
+- The invoice title *is* the mark: solid at the caps, combing open into the
+  verification code down the letterforms. Two styles, chosen in Settings:
+  **inside the letters** (default) keeps the mark exactly the shape of the
+  word — nothing stands in the tracking gaps, nothing extends below the
+  baseline — and **with a strip** grows the same columns below the word. The cuts sit exactly on the pattern's *space* columns,
   so the ink still standing at the bottom of the letters is the bar pattern —
   the strip isn't a second object parked underneath, it's the letters
   resolving into the code. Drawn as vector paths, so it stays crisp at any
-  print resolution. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
+  print resolution.
+- **The contained style is a brand mark, not a scannable symbol.** Code 128
+  needs every column present, and the gaps between letters delete some. That
+  costs nothing in practice: the code prints in the footer and the PDF check
+  reads the page against it either way — `--selftest-mark` proves all three
+  styles reach a verdict. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
   quietly in the footer.
 - The whole mark is **one path filled from one gradient** — letters, risers and
   strip in a single body, so no part of it carries a tone of its own. That is

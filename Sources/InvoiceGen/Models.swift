@@ -35,6 +35,9 @@ struct BusinessProfile: Codable, Hashable {
     /// object; ink is the one a laser scanner can actually read. There is no
     /// middle: print contrast fails everywhere between them.
     var verificationStripInk: Bool = false
+    /// True: the mark stays inside the letterforms (decorative).
+    /// False: it grows a strip below the word and stays a working barcode.
+    var verificationMarkContained: Bool = true
 
     // Tolerant decoding: older data files simply lack the newer keys.
     enum CodingKeys: String, CodingKey {
@@ -42,7 +45,7 @@ struct BusinessProfile: Codable, Hashable {
         case logoData, currencyCode, accentHex, templateStyle
         case defaultPaymentTermDays, defaultNotes, defaultFooterMessage, paymentMethods
         case defaultColumns, verificationPassphrase, verificationSalt, printVerificationCode
-        case verificationStripInk
+        case verificationStripInk, verificationMarkContained
     }
 
     init() {}
@@ -74,6 +77,8 @@ struct BusinessProfile: Codable, Hashable {
         verificationSalt = try c.decodeIfPresent(Data.self, forKey: .verificationSalt) ?? Data()
         printVerificationCode = try c.decodeIfPresent(Bool.self, forKey: .printVerificationCode) ?? true
         verificationStripInk = try c.decodeIfPresent(Bool.self, forKey: .verificationStripInk) ?? false
+        verificationMarkContained = try c.decodeIfPresent(
+            Bool.self, forKey: .verificationMarkContained) ?? true
     }
 
     var addressLines: [String] {
