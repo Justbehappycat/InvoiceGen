@@ -133,7 +133,11 @@ final class PaymentVault {
 
     @discardableResult
     func save(_ contents: VaultContents) -> Bool {
-        guard let key = Keychain.vaultKey() else {
+        // First use on this Mac — no key and no vault — is the only moment a
+        // key may be created.
+        let hasVault = FileManager.default.fileExists(atPath: fileURL.path)
+        let existing = Keychain.vaultKey()
+        guard let key = existing ?? (hasVault ? nil : Keychain.createVaultKey()) else {
             status = .keyUnavailable
             return false
         }

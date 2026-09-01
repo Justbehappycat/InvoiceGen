@@ -187,6 +187,20 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 - Settings ▸ Security shows the current state and an audit trail of when payment
   details changed.
 - Backups exclude payment details unless you explicitly opt in (and authenticate).
+- The key is **never** created except on a Mac that has no key *and* no vault.
+  It used to be minted whenever a Keychain read failed — but a read fails for
+  reasons that have nothing to do with the key being absent (most often a
+  rebuilt binary whose signature no longer matches the item's ACL), and minting
+  a replacement in that moment orphans a perfectly good vault, permanently.
+  A failed read now reports "key unavailable", which destroys nothing and
+  resolves itself the next time the app runs under the right identity.
+- Writing the key is add-if-absent for the same reason: an update would
+  overwrite the only copy that opens the existing vault. Replacing a key
+  happens only through the explicit repair button.
+- Self-tests that write get their own throwaway data directory, so no
+  diagnostic can touch the real vault. That is not hypothetical: a headless
+  test run under a different code signature is exactly how a vault got
+  orphaned during development.
 - If the Keychain is unreachable — most often because the app was rebuilt or
   re-signed, since Keychain ACLs follow the signing identity — the key falls back
   to a 0600 file beside the data and Settings says so. That still encrypts the

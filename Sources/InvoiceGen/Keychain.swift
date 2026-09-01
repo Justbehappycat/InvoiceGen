@@ -38,6 +38,13 @@ enum Keychain {
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
+        // Deliberately add-if-absent for the key: an update would overwrite
+        // whatever is already there, and the thing already there may be the
+        // only copy of the key that opens an existing vault. Replacing a key
+        // is `deleteKey()` followed by a write, which only the explicit repair
+        // path does.
+        if item == .vaultKey, read(.vaultKey) != nil { return false }
+
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecSuccess { return true }
         if status == errSecItemNotFound {
@@ -90,7 +97,16 @@ enum Keychain {
         return true
     }
 
-    /// The symmetric key used to seal the payment vault, created on first use.
+    /// The key that seals the payment vault. Read only — this never mints one.
+    ///
+    /// It used to: if the Keychain read failed, it generated a fresh key and
+    /// stored it. That is the most destructive thing this file could do. A
+    /// read can fail for reasons that have nothing to do with the key being
+    /// absent — most often a rebuilt binary whose signature no longer matches
+    /// the item's ACL — and minting a replacement in that moment orphans a
+    /// vault that was perfectly fine, permanently. Returning nil instead
+    /// yields "key unavailable", which is recoverable: nothing is destroyed
+    /// and the next run under the right identity opens the vault again.
     static func vaultKey() -> SymmetricKey? {
         if let existing = read(.vaultKey), existing.count == 32 {
             keySource = .keychain
@@ -100,7 +116,17 @@ enum Keychain {
             keySource = .protectedFile
             return SymmetricKey(data: existing)
         }
+        return nil
+    }
 
+    /// Whether this Mac already holds a vault key at all — the question
+    /// `vaultKey()` used to answer by creating one.
+    static func hasVaultKey() -> Bool { vaultKey() != nil }
+
+    /// Creates the key, and only for a Mac that doesn't have one. Callers must
+    /// establish that there is no vault to orphan before asking.
+    static func createVaultKey() -> SymmetricKey? {
+        if let existing = vaultKey() { return existing }
         let key = SymmetricKey(size: .bits256)
         let raw = key.withUnsafeBytes { Data($0) }
         if write(.vaultKey, raw) {

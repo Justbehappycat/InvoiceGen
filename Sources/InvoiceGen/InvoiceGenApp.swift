@@ -14,6 +14,20 @@ private func waitForSecrets(_ store: AppStore, timeout: TimeInterval = 20) {
     }
 }
 
+/// Self-tests mutate a store and save it. Pointed at the real data directory
+/// they also touch the real vault — which is how a headless run under a
+/// different code signature came to overwrite the Keychain key and orphan a
+/// perfectly good vault. So every diagnostic that writes gets its own throwaway
+/// data directory unless the caller has deliberately named one.
+private func isolateDataDirectoryForDiagnostics() {
+    guard ProcessInfo.processInfo.environment["INVOICEGEN_DATA"] == nil else { return }
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("invoicegen-selftest-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    setenv("INVOICEGEN_DATA", directory.appendingPathComponent("data.json").path, 1)
+    print("(self-test sandbox: \(directory.path))")
+}
+
 @main
 struct InvoiceGenApp: App {
     @StateObject private var store = AppStore.shared
@@ -282,6 +296,12 @@ struct InvoiceGenApp: App {
             MainActor.assumeIsolated { waitForSecrets(store) }
             print("store vaultStatus: \(store.vaultStatus), secretsUnprotected: \(store.secretsUnprotected)")
             print("in-memory business methods: \(store.data.business.paymentMethods.count)")
+            print("verification passphrase set: \(store.hasVerificationPassphrase)")
+            print("verification mark style: \(store.data.business.verificationMarkStyle.rawValue)"
+                + ", printed: \(store.data.business.printVerificationCode)")
+            if let invoice = store.data.invoices.first {
+                print("code for #\(invoice.number): \(store.verificationCode(for: invoice) ?? "none")")
+            }
             store.saveNow()
             print("after saveNow -> vault file: \(FileManager.default.fileExists(atPath: vault.vaultURL.path)), status: \(store.vaultStatus), unprotected: \(store.secretsUnprotected)")
             exit(0)
@@ -651,6 +671,7 @@ struct InvoiceGenApp: App {
             exit(0)
         }
         if args.contains("--selftest-archive") {
+            isolateDataDirectoryForDiagnostics()
             setvbuf(stdout, nil, _IONBF, 0)
             _ = NSApplication.shared
             MainActor.assumeIsolated {
@@ -729,6 +750,7 @@ struct InvoiceGenApp: App {
             exit(0)
         }
         if args.contains("--selftest-list") {
+            isolateDataDirectoryForDiagnostics()
             setvbuf(stdout, nil, _IONBF, 0)
             _ = NSApplication.shared
             MainActor.assumeIsolated {
@@ -876,6 +898,7 @@ struct InvoiceGenApp: App {
             exit(0)
         }
         if args.contains("--selftest-undo") {
+            isolateDataDirectoryForDiagnostics()
             let store = AppStore.shared
             let before = store.data.invoices.count
             let created = store.newInvoice()

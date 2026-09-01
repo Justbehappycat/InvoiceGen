@@ -83,11 +83,16 @@ struct BusinessProfile: Codable, Hashable {
         verificationSalt = try c.decodeIfPresent(Data.self, forKey: .verificationSalt) ?? Data()
         printVerificationCode = try c.decodeIfPresent(Bool.self, forKey: .printVerificationCode) ?? true
         verificationStripInk = try c.decodeIfPresent(Bool.self, forKey: .verificationStripInk) ?? false
-        verificationMarkContained = try c.decodeIfPresent(
-            Bool.self, forKey: .verificationMarkContained) ?? true
+        // A file that predates the style enum carries no preference at all, so
+        // it gets the current default. Only a file that *explicitly* chose the
+        // contained mark keeps it — mapping a missing key to `true` and then
+        // to `.letters` silently pinned every existing file to the old style.
+        let containedChoice = try c.decodeIfPresent(Bool.self, forKey: .verificationMarkContained)
+        verificationMarkContained = containedChoice ?? true
         verificationMarkStyle = try c.decodeIfPresent(
             VerificationMarkStyle.self, forKey: .verificationMarkStyle)
-            ?? (verificationMarkContained ? .letters : .strip)
+            ?? containedChoice.map { $0 ? .letters : .strip }
+            ?? .banner
         verificationBarTone = try c.decodeIfPresent(Double.self, forKey: .verificationBarTone) ?? 0.10
     }
 
