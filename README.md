@@ -238,6 +238,10 @@ unconfigured or plain-http address refuses to publish at all.
 
 ## Publishing an invoice as a link
 
+> Off, and nothing is deployed. The Worker that served `invoice.finecut.com`
+> has been deleted. Publishing stays dormant until an address and token are set
+> in Settings ▸ Publishing, so the Share menu simply says so and does nothing.
+
 **Share** on an invoice publishes it to `invoice.finecut.com` and copies the
 link to the clipboard, so a client gets a URL instead of an attachment. The
 same menu updates the published copy or unpublishes it.

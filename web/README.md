@@ -1,5 +1,11 @@
 # invoice.finecut.com
 
+> **Not deployed.** This was stood up once and taken down again — the Worker
+> and its KV namespace are deleted, and nothing was ever published through it.
+> The code and its tests are kept here in case the idea comes back; deploying
+> it is the four commands below and nothing else in the app changes, because
+> publishing stays off until an address and token are set in Settings.
+
 A Cloudflare Worker that serves invoices the Mac app has published. Nothing is
 uploaded until you press **Share** on an invoice; unpublishing deletes it.
 
