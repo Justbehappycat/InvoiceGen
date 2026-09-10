@@ -812,6 +812,72 @@ struct InvoiceGenApp: App {
             }
             exit(0)
         }
+        if args.contains("--selftest-publish") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            _ = NSApplication.shared
+            MainActor.assumeIsolated {
+                var business = BusinessProfile()
+                business.name = "Northwind Studio LLC"
+                business.accentHex = "#7C7C7C"
+                business.publishBaseURL = "https://invoice.finecut.com"
+
+                var invoice = Invoice()
+                invoice.number = "17"
+                invoice.items = [LineItem(title: "Edit", details: "", quantity: 2, price: 200)]
+                var customer = Customer(); customer.name = "Harbour Coffee Roasters"
+
+                // A payment method with values that must never reach the page.
+                var bank = PaymentMethod.make(.bank)
+                bank.set("Account number", "000123456789")
+                bank.set("Routing number (ACH)", "123456789")
+                invoice.paymentMethods = [bank]
+
+                let target = PublishService.Target(
+                    url: URL(string: "https://invoice.finecut.com")!, token: "token-1234567890")
+
+                let meta = PublishService.metadata(for: invoice, customer: customer, business: business)
+                let json = String(data: try! JSONSerialization.data(withJSONObject: meta), encoding: .utf8)!
+                print("metadata:", meta.keys.sorted().joined(separator: ", "))
+                let leaks = ["000123456789", "123456789"].filter { json.contains($0) }
+                print("payment details stay out of the page metadata:",
+                      leaks.isEmpty ? "yes" : "NO — FAILED \(leaks)")
+                print("summary is present:",
+                      meta["number"] == "17" && meta["amountDue"] == "$400.00"
+                        && meta["status"] == "Draft" ? "yes" : "FAILED")
+
+                let id = PublishService.makeID()
+                print("id is unguessable and url-safe:",
+                      id.count == 12 && id.allSatisfy(\.isHexDigit) ? "yes (\(id))" : "FAILED \(id)")
+                print("ids differ each time:",
+                      Set((0..<200).map { _ in PublishService.makeID() }).count == 200 ? "yes" : "FAILED")
+
+                let put = PublishService.publishRequest(
+                    id: id, target: target, metadata: meta, pdf: Data("%PDF".utf8))
+                print("publish:", put.httpMethod ?? "-", put.url?.path ?? "-",
+                      put.url?.path == "/publish/\(id)" ? "ok" : "FAILED")
+                print("token is sent as a bearer:",
+                      put.value(forHTTPHeaderField: "Authorization") == "Bearer token-1234567890"
+                        ? "ok" : "FAILED")
+                print("body is the PDF:", put.httpBody == Data("%PDF".utf8) ? "ok" : "FAILED")
+
+                let delete = PublishService.unpublishRequest(id: id, target: target)
+                print("unpublish:", delete.httpMethod ?? "-", delete.url?.path ?? "-",
+                      delete.httpMethod == "DELETE" ? "ok" : "FAILED")
+
+                print("public link:", PublishService.publicURL(for: id, target: target).absoluteString)
+
+                // Without an address or a token, nothing can be sent.
+                var unset = business
+                unset.publishBaseURL = ""
+                print("refuses to publish when unconfigured:",
+                      PublishService.target(for: unset) == nil ? "yes" : "NO — FAILED")
+                var insecure = business
+                insecure.publishBaseURL = "http://invoice.finecut.com"
+                print("refuses a plain-http address:",
+                      PublishService.target(for: insecure) == nil ? "yes" : "NO — FAILED")
+            }
+            exit(0)
+        }
         if args.contains("--selftest-fields") {
             setvbuf(stdout, nil, _IONBF, 0)
             // Deleting the last digit must reach zero, not restore the old

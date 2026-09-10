@@ -11,6 +11,24 @@ enum Keychain {
     enum Item: String {
         case vaultKey = "payment-vault-key"
         case vaultFingerprint = "payment-vault-fingerprint"
+        case publishToken = "publish-token"
+    }
+
+    /// The bearer token for the publishing endpoint. Not part of the payment
+    /// vault: it protects a web endpoint, not the payment details, and mixing
+    /// the two would mean a vault problem took publishing down with it.
+    static func publishToken() -> String? {
+        guard let data = read(.publishToken), let token = String(data: data, encoding: .utf8),
+              !token.isEmpty else { return nil }
+        return token
+    }
+
+    @discardableResult
+    static func setPublishToken(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { delete(.publishToken); return true }
+        delete(.publishToken)          // replace, don't merge
+        return write(.publishToken, Data(trimmed.utf8))
     }
 
     static func read(_ item: Item) -> Data? {

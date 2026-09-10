@@ -498,6 +498,9 @@ final class AppStore: ObservableObject {
         Verification.verify(scanned, in: data, key: verificationKey)
     }
 
+    /// Whether an address *and* a token are both present.
+    var publishingIsConfigured: Bool { PublishService.target(for: data.business) != nil }
+
     // MARK: - Archive and trash
 
     /// Everything that is live work: not archived, not in the trash.

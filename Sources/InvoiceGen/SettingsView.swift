@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
+    @State private var publishTokenEntry = ""
+    @State private var tokenSaved = false
 
     private var business: Binding<BusinessProfile> {
         Binding(get: { store.data.business }, set: { store.data.business = $0 })
@@ -19,6 +21,7 @@ struct SettingsView: View {
                     verification
                     payments
                     security
+                    publishing
                     defaults
                     storage
                 }
@@ -422,6 +425,62 @@ struct SettingsView: View {
             .padding(6)
         } label: {
             Text("Security").font(.headline)
+        }
+    }
+
+    private var publishing: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                    GridRow {
+                        Text("Address")
+                        TextField("https://invoice.finecut.com", text: business.publishBaseURL)
+                    }
+                    GridRow {
+                        Text("Token")
+                        HStack(spacing: 8) {
+                            SecureField(Keychain.publishToken() == nil ? "Paste the token" : "••••••••••••",
+                                        text: $publishTokenEntry)
+                            Button("Save") {
+                                Keychain.setPublishToken(publishTokenEntry)
+                                publishTokenEntry = ""
+                                tokenSaved = true
+                            }
+                            .disabled(publishTokenEntry.isEmpty)
+                            if Keychain.publishToken() != nil {
+                                Button("Remove") {
+                                    Keychain.setPublishToken("")
+                                    tokenSaved = false
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: store.publishingIsConfigured ? "link.circle.fill" : "link.slash")
+                        .foregroundStyle(store.publishingIsConfigured ? .green : .secondary)
+                    Text(store.publishingIsConfigured
+                         ? "Ready. \"Share\" on an invoice publishes it and copies the link. "
+                           + "Only the PDF and a short summary — number, dates, total, status — leave "
+                           + "this Mac; payment details stay inside the PDF, as they do in an email."
+                         : "Publishing is off. Set the address and paste the token from the Worker "
+                           + "to turn it on. Nothing is uploaded until you press Share on an invoice.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text("A published link is unguessable but not password-protected — anyone holding "
+                     + "the URL can open that one invoice, which is what lets a client just click it. "
+                     + "Unpublish from the same menu when a job is done.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        } label: {
+            Text("Publishing").font(.headline)
         }
     }
 

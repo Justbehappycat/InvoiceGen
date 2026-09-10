@@ -45,6 +45,9 @@ struct BusinessProfile: Codable, Hashable {
     var verificationBarTone: Double = 0.10
     /// Whether the one-time correction below has already run for this file.
     var markStyleMigrated: Bool = true
+    /// Where published invoices are served from, e.g. https://invoice.finecut.com
+    /// The token that goes with it lives in the Keychain, never in data.json.
+    var publishBaseURL: String = ""
 
     // Tolerant decoding: older data files simply lack the newer keys.
     enum CodingKeys: String, CodingKey {
@@ -54,6 +57,7 @@ struct BusinessProfile: Codable, Hashable {
         case defaultColumns, verificationPassphrase, verificationSalt, printVerificationCode
         case verificationStripInk, verificationMarkContained
         case verificationMarkStyle, verificationBarTone, markStyleMigrated
+        case publishBaseURL
     }
 
     init() {}
@@ -97,6 +101,7 @@ struct BusinessProfile: Codable, Hashable {
             ?? .banner
         verificationBarTone = try c.decodeIfPresent(Double.self, forKey: .verificationBarTone) ?? 0.10
         markStyleMigrated = try c.decodeIfPresent(Bool.self, forKey: .markStyleMigrated) ?? false
+        publishBaseURL = try c.decodeIfPresent(String.self, forKey: .publishBaseURL) ?? ""
     }
 
     var addressLines: [String] {
@@ -250,6 +255,11 @@ struct Invoice: Identifiable, Codable, Hashable {
     /// mis-click costs nothing even after the undo history is gone.
     var deletedAt: Date?
 
+    /// The id this invoice is published under, if it is. Kept so re-publishing
+    /// reuses the same link and a client's bookmark keeps working.
+    var publishedID: String?
+    var publishedAt: Date?
+
     var enabledPaymentMethods: [PaymentMethod] {
         paymentMethods.filter { $0.isEnabled && !($0.displayTitle.isEmpty && $0.filledFields.isEmpty) }
     }
@@ -258,7 +268,7 @@ struct Invoice: Identifiable, Codable, Hashable {
         case id, number, poNumber, title, customerID, issueDate, dueDate, items
         case discountIsPercent, discountValue, taxLabel, taxRate, amountPaid
         case notes, footerMessage, currencyCode, status, createdAt, paymentMethods, columns
-        case archivedAt, deletedAt
+        case archivedAt, deletedAt, publishedID, publishedAt
     }
 
     init() {}
@@ -287,6 +297,8 @@ struct Invoice: Identifiable, Codable, Hashable {
         columns = try c.decodeIfPresent(InvoiceColumns.self, forKey: .columns) ?? InvoiceColumns()
         archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
+        publishedID = try c.decodeIfPresent(String.self, forKey: .publishedID)
+        publishedAt = try c.decodeIfPresent(Date.self, forKey: .publishedAt)
     }
 
     // MARK: Totals

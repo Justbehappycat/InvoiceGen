@@ -47,6 +47,10 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
   silently puts 500 back. Every number field here keeps the text as its state
   and lets the value follow: empty is zero, and a half-typed "1." leaves the
   field alone instead of fighting you. `--selftest-fields` covers it.
+`--selftest-publish` checks the publishing contract without a network: that the
+page metadata carries the summary and *not* payment details, that ids are
+unguessable and unique, that the requests carry the bearer token, and that an
+unconfigured or plain-http address refuses to publish at all.
 - Undo/redo (⌘Z / ⇧⌘Z) across every edit, with edits made in a burst collapsed
   into a single step.
 - Live page preview beside the editor, paginated exactly like the exported PDF.
@@ -231,6 +235,24 @@ Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 - Default notes/terms (anything beyond payment details) and footer message — new
   invoices start from these.
 - Next invoice number, data-file location, backup and restore.
+
+## Publishing an invoice as a link
+
+**Share** on an invoice publishes it to `invoice.finecut.com` and copies the
+link to the clipboard, so a client gets a URL instead of an attachment. The
+same menu updates the published copy or unpublishes it.
+
+- Nothing leaves this Mac until you press Share, and only two things do then:
+  the PDF you would have emailed, and a short summary for the page around it —
+  number, dates, amount due, status. Payment details are not in that summary;
+  they stay inside the PDF.
+- A link is a capability: 12 random hex characters that anyone holding the URL
+  can open. That is what makes it work for a client with no account. Treat the
+  link like the invoice, and unpublish when the job is done.
+- Re-publishing keeps the same link, so a client's bookmark keeps working.
+- The endpoint address lives in `data.json`; the bearer token lives in the
+  login Keychain, never on disk in the clear.
+- The Worker, its tests and the deployment steps are in [`web/`](web/README.md).
 
 ## Data
 

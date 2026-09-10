@@ -13,6 +13,9 @@ struct InvoiceEditorView: View {
     @ObservedObject private var paymentLock = PaymentLock.shared
     @State private var isNamingTemplate = false
     @State private var isEditingColumns = false
+    @State private var isPublishing = false
+    @State private var publishError: String?
+    @State private var justCopiedLink = false
     @State private var templateName = ""
 
     private var customer: Customer? { store.customer(id: invoice.customerID) }
@@ -132,6 +135,8 @@ struct InvoiceEditorView: View {
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Show or hide the live preview (⇧⌘P)")
 
+            shareMenu
+
             Button {
                 PDFExporter.printInvoice(invoice: invoice, customer: customer, business: business)
             } label: {
@@ -150,6 +155,89 @@ struct InvoiceEditorView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// Publishing puts the invoice behind a link a client can open. Always
+    /// explicit, and reversible from the same menu.
+    @ViewBuilder
+    private var shareMenu: some View {
+        Menu {
+            if let link = publishedLink {
+                Button(justCopiedLink ? "Copied" : "Copy link") { copy(link) }
+                Button("Open in browser") { NSWorkspace.shared.open(link) }
+                Divider()
+                Button("Update the published copy") { publish() }
+                Button("Unpublish", role: .destructive) { unpublish() }
+            } else if store.publishingIsConfigured {
+                Button("Publish link…") { publish() }
+            } else {
+                Text("Set the publishing address and token in Settings first")
+            }
+        } label: {
+            Label(isPublishing ? "Publishing…" : (publishedLink == nil ? "Share" : "Shared"),
+                  systemImage: publishedLink == nil ? "link" : "link.circle.fill")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(isPublishing)
+        .help(publishedLink?.absoluteString ?? "Publish this invoice as a link for the client")
+        .alert("Couldn't publish", isPresented: Binding(
+            get: { publishError != nil }, set: { if !$0 { publishError = nil } }
+        )) {
+            Button("OK", role: .cancel) { publishError = nil }
+        } message: {
+            Text(publishError ?? "")
+        }
+    }
+
+    private var publishedLink: URL? {
+        guard let id = invoice.publishedID,
+              let target = PublishService.target(for: store.data.business) else { return nil }
+        return PublishService.publicURL(for: id, target: target)
+    }
+
+    private func copy(_ link: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link.absoluteString, forType: .string)
+        justCopiedLink = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            justCopiedLink = false
+        }
+    }
+
+    private func publish() {
+        isPublishing = true
+        Task { @MainActor in
+            defer { isPublishing = false }
+            do {
+                let result = try await PublishService.publish(
+                    invoice: invoice, customer: customer, business: store.data.business
+                )
+                invoice.publishedID = result.id
+                invoice.publishedAt = Date()
+                store.commitHistory()
+                copy(result.url)
+            } catch {
+                publishError = error.localizedDescription
+            }
+        }
+    }
+
+    private func unpublish() {
+        guard let id = invoice.publishedID else { return }
+        isPublishing = true
+        Task { @MainActor in
+            defer { isPublishing = false }
+            do {
+                try await PublishService.unpublish(id: id, business: store.data.business)
+                invoice.publishedID = nil
+                invoice.publishedAt = nil
+                store.commitHistory()
+            } catch {
+                publishError = error.localizedDescription
+            }
+        }
     }
 
     /// Moving the invoice date drags the due date with it, so a 30-day invoice

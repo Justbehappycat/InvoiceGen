@@ -1,0 +1,16 @@
+name = "finecut-invoices"
+main = "src/worker.js"
+compatibility_date = "2026-01-01"
+
+# invoice.finecut.com — the zone is already on Cloudflare, so this is the only
+# DNS step needed; wrangler creates the record on deploy.
+routes = [
+  { pattern = "invoice.finecut.com", custom_domain = true }
+]
+
+# Published invoices live here. Values are the PDF bytes; the metadata carries
+# only what the page shows (number, dates, total, status) — never payment
+# details, which stay inside the PDF.
+[[kv_namespaces]]
+binding = "INVOICES"
+id = "REPLACE_WITH_NAMESPACE_ID"
