@@ -56,8 +56,50 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "==> Signing (ad-hoc)"
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || echo "   (ad-hoc signing skipped)"
+# Signing. The identity matters for more than Gatekeeper: Keychain items are
+# access-controlled by the signature's designated requirement, and an ad-hoc
+# signature's requirement is the cdhash, which changes on every build. That is
+# what orphaned the payment vault once already. Any real certificate gives a
+# stable requirement, so prefer one; fall back to ad-hoc so the app still
+# builds on a machine with no certificates at all.
+#
+# Override with:  INVOICEGEN_IDENTITY="Developer ID Application: ..." ./build.sh
+find_identity() {
+    security find-identity -v -p codesigning 2>/dev/null \
+        | sed -n "s/^ *[0-9]*) [0-9A-F]* \"\(.*$1.*\)\"$/\1/p" \
+        | head -1
+}
+
+IDENTITY="${INVOICEGEN_IDENTITY:-}"
+NOTARIZABLE=no
+if [ -z "$IDENTITY" ]; then
+    IDENTITY="$(find_identity "Developer ID Application")"
+    [ -n "$IDENTITY" ] && NOTARIZABLE=yes
+fi
+[ -z "$IDENTITY" ] && IDENTITY="$(find_identity "Apple Development")"
+
+if [ -n "$IDENTITY" ]; then
+    echo "==> Signing as $IDENTITY"
+    # --options runtime: hardened runtime, required for notarization and good
+    # hygiene for an app holding an HMAC key and an encrypted vault.
+    # --timestamp needs the network and only matters for notarized builds.
+    SIGN_ARGS=(--force --options runtime --identifier com.finecut.invoicegen)
+    if [ "$NOTARIZABLE" = yes ]; then SIGN_ARGS+=(--timestamp); else SIGN_ARGS+=(--timestamp=none); fi
+    # Inside-out, not --deep: --deep is discouraged and mis-signs nested code.
+    codesign "${SIGN_ARGS[@]}" --sign "$IDENTITY" "$APP/Contents/MacOS/InvoiceGen"
+    codesign "${SIGN_ARGS[@]}" --sign "$IDENTITY" "$APP"
+else
+    echo "==> Signing (ad-hoc — no certificate found)"
+    echo "    Warning: the Keychain vault will not survive the next rebuild."
+    codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "   (ad-hoc signing skipped)"
+fi
+
+echo "==> Verifying signature"
+codesign --verify --strict --verbose=1 "$APP" 2>&1 | sed "s/^/    /"
+# The designated requirement IS the Keychain access rule. Print it so a change
+# here is never silent: if this line changes, the vault needs re-entering.
+echo "    designated requirement:"
+codesign -d -r- "$APP" 2>/dev/null | sed -n "s/^designated => /      /p"
 
 echo "==> Done: $APP"
 echo "    Install with:  cp -R \"$APP\" /Applications/"
