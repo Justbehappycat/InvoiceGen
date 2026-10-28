@@ -813,6 +813,78 @@ struct InvoiceGenApp: App {
             }
             exit(0)
         }
+        if args.contains("--selftest-bulk") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            // Mutating test: never let it near the real data file.
+            isolateDataDirectoryForDiagnostics()
+            _ = NSApplication.shared
+            var failures = 0
+            func check(_ label: String, _ condition: Bool) {
+                print("  \(condition ? "ok  " : "FAIL") \(label)")
+                if !condition { failures += 1 }
+            }
+
+            MainActor.assumeIsolated {
+                let store = AppStore.shared
+                store.data.invoices = []
+                var made: [Invoice] = []
+                for n in 1...5 {
+                    var invoice = Invoice()
+                    invoice.number = String(n)
+                    invoice.items = [LineItem(title: "Work", details: "", quantity: 1, price: 100)]
+                    made.append(invoice)
+                }
+                store.data.invoices = made
+                let all = Set(made.map(\.id))
+                let three = Set(made.prefix(3).map(\.id))
+                store.commitHistory()
+
+                print("bulk status:")
+                store.setStatus(.paid, on: three)
+                check("marks exactly the selection paid",
+                      store.data.invoices.filter { $0.status == .paid }.count == 3)
+                check("paid also settles the amount",
+                      store.invoices(with: three).allSatisfy { $0.amountPaid == $0.total })
+
+                print("undo is one step for the whole batch:")
+                store.undo()
+                check("one undo restores all three",
+                      store.data.invoices.allSatisfy { $0.status != .paid })
+
+                print("bulk archive / trash:")
+                store.setArchived(true, on: three)
+                check("archives three", store.archivedInvoices.count == 3)
+                store.setArchived(false, on: three)
+                check("un-archives three", store.archivedInvoices.isEmpty)
+
+                store.deleteInvoices(ids: three)
+                check("trashes three", store.trashedInvoices.count == 3)
+                check("leaves the rest active", store.activeInvoices.count == 2)
+                store.restoreFromTrash(ids: three)
+                check("restores three", store.trashedInvoices.isEmpty)
+
+                print("bulk duplicate:")
+                let copies = store.duplicate(ids: three)
+                check("makes one copy each", copies.count == 3)
+                check("copies are drafts", copies.allSatisfy { $0.status == .draft })
+                check("originals remain", store.data.invoices.count == 8)
+
+                print("bulk permanent delete:")
+                store.permanentlyDelete(ids: Set(copies.map(\.id)))
+                check("removes exactly the copies", store.data.invoices.count == 5)
+
+                print("empty selection is a no-op:")
+                let before = store.data.invoices
+                store.setStatus(.paid, on: [])
+                store.deleteInvoices(ids: [])
+                check("nothing changed", store.data.invoices == before)
+                _ = all
+            }
+
+            print(failures == 0 ? "bulk self-test: all passed" : "bulk self-test: \(failures) FAILED")
+            exit(failures == 0 ? 0 : 1)
+        }
+
         if args.contains("--selftest-update") {
             setvbuf(stdout, nil, _IONBF, 0)
             var failures = 0
@@ -1246,9 +1318,37 @@ struct InvoiceGenApp: App {
 
 /// Tracks what the window is currently showing so menu commands can act on it.
 final class AppFocus: ObservableObject {
-    @Published var invoiceID: UUID?
+    /// The one invoice the detail pane is editing. Nil when nothing -- or more
+    /// than one thing -- is selected.
+    @Published var invoiceID: UUID? {
+        didSet {
+            // Everything that already said `focus.invoiceID = x` means "select
+            // exactly this one", so keep the set in step rather than making
+            // every call site learn about multi-selection.
+            if let invoiceID {
+                if selectedInvoiceIDs != [invoiceID] { selectedInvoiceIDs = [invoiceID] }
+            } else if selectedInvoiceIDs.count <= 1 {
+                // Only clear on the way out of a single selection: going nil
+                // because two things are selected must not wipe the set.
+                if !selectedInvoiceIDs.isEmpty { selectedInvoiceIDs = [] }
+            }
+        }
+    }
+
+    /// Everything selected in the sidebar. One entry is the ordinary case;
+    /// more than one puts the detail pane into bulk mode.
+    @Published var selectedInvoiceIDs: Set<UUID> = []
+
     @Published var customerID: UUID?
     @Published var requestedSection: SidebarSection?
+
+    var isMultiSelecting: Bool { selectedInvoiceIDs.count > 1 }
+
+    /// Selects exactly these, routing through the single/multi distinction.
+    func select(_ ids: Set<UUID>) {
+        selectedInvoiceIDs = ids
+        invoiceID = ids.count == 1 ? ids.first : nil
+    }
 }
 
 enum SidebarSection: String, CaseIterable, Identifiable {

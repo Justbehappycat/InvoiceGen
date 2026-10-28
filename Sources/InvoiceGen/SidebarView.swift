@@ -150,12 +150,12 @@ struct SidebarView: View {
 
     private var invoiceList: some View {
         List(selection: Binding(
-            get: { focus.invoiceID },
-            set: { newValue in
-                focus.invoiceID = newValue
+            get: { focus.selectedInvoiceIDs },
+            set: { (newValue: Set<UUID>) in
+                focus.select(newValue)
                 // Picking an invoice means "show me that invoice", even when
                 // the detail pane is currently parked on Saved items.
-                if newValue != nil, section != .invoices { section = .invoices }
+                if !newValue.isEmpty, section != .invoices { section = .invoices }
             }
         )) {
             if scope == .archive {
@@ -186,48 +186,64 @@ struct SidebarView: View {
         }
     }
 
+    /// Right-clicking inside a multi-selection acts on all of it; right-clicking
+    /// outside one acts on just that row. That is the Finder rule, and getting
+    /// it wrong means silently editing one invoice when eight were selected.
+    private func targets(for invoice: Invoice) -> Set<UUID> {
+        focus.selectedInvoiceIDs.count > 1 && focus.selectedInvoiceIDs.contains(invoice.id)
+            ? focus.selectedInvoiceIDs
+            : [invoice.id]
+    }
+
     private func row(for invoice: Invoice) -> some View {
         InvoiceRow(invoice: invoice, customer: store.customer(id: invoice.customerID))
-                    .tag(invoice.id)
-                    .contextMenu {
-                        Menu("Status") {
-                            ForEach(InvoiceStatus.allCases) { status in
-                                Button {
-                                    store.setStatus(status, on: invoice.id)
-                                } label: {
-                                    // A checkmark on the current one, so the
-                                    // menu also answers "what is it now?"
-                                    Label(
-                                        status.label,
-                                        systemImage: invoice.status == status ? "checkmark" : ""
-                                    )
-                                }
-                            }
-                        }
-                        if invoice.status != .paid {
-                            Button("Mark as Paid") { store.setStatus(.paid, on: invoice.id) }
-                        }
-                        Divider()
-                        if invoice.isTrashed {
-                            Button("Put Back") { store.restoreFromTrash(id: invoice.id) }
-                            Button("Delete Permanently", role: .destructive) {
-                                if focus.invoiceID == invoice.id { focus.invoiceID = nil }
-                                store.permanentlyDelete(id: invoice.id)
-                            }
-                        } else {
-                            Button("Duplicate") {
-                                let copy = store.duplicate(invoice)
-                                focus.invoiceID = copy.id
-                            }
-                            Button(invoice.isArchived ? "Move to Invoices" : "Archive") {
-                                store.setArchived(!invoice.isArchived, on: invoice.id)
-                            }
-                            Button("Move to Trash", role: .destructive) {
-                                if focus.invoiceID == invoice.id { focus.invoiceID = nil }
-                                store.deleteInvoice(id: invoice.id)
-                            }
+            .tag(invoice.id)
+            .contextMenu {
+                let ids = targets(for: invoice)
+                let many = ids.count > 1
+                let suffix = many ? " (\(ids.count))" : ""
+
+                Menu("Status") {
+                    ForEach(InvoiceStatus.allCases) { status in
+                        Button {
+                            store.setStatus(status, on: ids)
+                        } label: {
+                            // A checkmark on the current one, so the menu also
+                            // answers "what is it now?" -- but only when a
+                            // single invoice is in play and that question has
+                            // one answer.
+                            Label(
+                                status.label,
+                                systemImage: !many && invoice.status == status ? "checkmark" : ""
+                            )
                         }
                     }
+                }
+                if many || invoice.status != .paid {
+                    Button("Mark as Paid" + suffix) { store.setStatus(.paid, on: ids) }
+                }
+                Divider()
+                if invoice.isTrashed {
+                    Button("Put Back" + suffix) { store.restoreFromTrash(ids: ids) }
+                    Button("Delete Permanently" + suffix, role: .destructive) {
+                        focus.select(focus.selectedInvoiceIDs.subtracting(ids))
+                        store.permanentlyDelete(ids: ids)
+                    }
+                } else {
+                    Button("Duplicate" + suffix) {
+                        let copies = store.duplicate(ids: ids)
+                        focus.select(Set(copies.map(\.id)))
+                    }
+                    let allArchived = store.invoices(with: ids).allSatisfy(\.isArchived)
+                    Button((allArchived ? "Move to Invoices" : "Archive") + suffix) {
+                        store.setArchived(!allArchived, on: ids)
+                    }
+                    Button("Move to Trash" + suffix, role: .destructive) {
+                        focus.select(focus.selectedInvoiceIDs.subtracting(ids))
+                        store.deleteInvoices(ids: ids)
+                    }
+                }
+            }
     }
 
     private var invoiceFilterBar: some View {

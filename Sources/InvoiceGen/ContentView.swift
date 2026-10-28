@@ -48,7 +48,9 @@ struct ContentView: View {
     private var detail: some View {
         switch section {
         case .invoices:
-            if let id = focus.invoiceID, let binding = store.binding(invoiceID: id) {
+            if focus.isMultiSelecting {
+                BulkInvoiceView()
+            } else if let id = focus.invoiceID, let binding = store.binding(invoiceID: id) {
                 InvoiceEditorView(invoice: binding)
                     .id(id)
             } else {

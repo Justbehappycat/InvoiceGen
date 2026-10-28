@@ -551,6 +551,81 @@ final class AppStore: ObservableObject {
         commitHistory()
     }
 
+    // MARK: - Bulk edits
+    //
+    // Each of these wraps the whole batch in ONE history step. Looping the
+    // single-invoice calls would work, but it would also push one undo step
+    // per invoice -- so undoing a 20-invoice change would take 20 presses of
+    // ⌘Z, which is not what anyone means by "undo that".
+
+    func setStatus(_ status: InvoiceStatus, on ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        commitHistory()
+        for index in data.invoices.indices where ids.contains(data.invoices[index].id) {
+            data.invoices[index].status = status
+            // Same rule as the single-invoice path: paid means paid in full.
+            if status == .paid {
+                data.invoices[index].amountPaid = data.invoices[index].total
+            }
+        }
+        commitHistory()
+    }
+
+    func setArchived(_ archived: Bool, on ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        commitHistory()
+        let now = Date()
+        for index in data.invoices.indices where ids.contains(data.invoices[index].id) {
+            data.invoices[index].archivedAt = archived ? now : nil
+        }
+        commitHistory()
+    }
+
+    func deleteInvoices(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        commitHistory()
+        let now = Date()
+        for index in data.invoices.indices where ids.contains(data.invoices[index].id) {
+            data.invoices[index].deletedAt = now
+        }
+        commitHistory()
+    }
+
+    func restoreFromTrash(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        commitHistory()
+        for index in data.invoices.indices where ids.contains(data.invoices[index].id) {
+            data.invoices[index].deletedAt = nil
+        }
+        commitHistory()
+    }
+
+    func permanentlyDelete(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        commitHistory()
+        data.invoices.removeAll { ids.contains($0.id) }
+        commitHistory()
+    }
+
+    @discardableResult
+    func duplicate(ids: Set<UUID>) -> [Invoice] {
+        guard !ids.isEmpty else { return [] }
+        commitHistory()
+        // Oldest first, so the copies end up in the same order as the originals.
+        let originals = data.invoices.filter { ids.contains($0.id) }.reversed()
+        var copies: [Invoice] = []
+        for invoice in originals {
+            copies.append(duplicate(invoice))
+        }
+        commitHistory()
+        return copies
+    }
+
+    /// Every invoice in `ids`, in the order they appear in the data.
+    func invoices(with ids: Set<UUID>) -> [Invoice] {
+        data.invoices.filter { ids.contains($0.id) }
+    }
+
     func invoice(id: UUID) -> Invoice? {
         data.invoices.first { $0.id == id }
     }
