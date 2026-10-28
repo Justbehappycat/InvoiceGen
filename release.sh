@@ -23,9 +23,15 @@ fi
 APP="$ROOT/build/InvoiceGen.app"
 
 # The updater refuses anything not signed by our Developer ID, so refuse to
-# ship one too rather than publishing a release nobody can install.
-if ! codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
+# ship one too rather than publishing a release nobody can install. Testing the
+# requirement directly beats grepping codesign's prose -- `codesign -dv` does
+# not even print Authority lines below verbosity 2, which made the first
+# version of this check reject every good build. This is the same requirement
+# the updater evaluates, so the two cannot disagree.
+DEVELOPER_ID_REQUIREMENT='anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */'
+if ! codesign --verify --strict -R "=$DEVELOPER_ID_REQUIREMENT" "$APP" 2>/dev/null; then
     echo "error: $APP is not Developer ID signed — the updater would reject it." >&2
+    echo "       signed as:$(codesign -dv --verbose=2 "$APP" 2>&1 | sed -n 's/^Authority=/ /p' | head -1)" >&2
     exit 1
 fi
 
