@@ -35,18 +35,63 @@ if ! codesign --verify --strict -R "=$DEVELOPER_ID_REQUIREMENT" "$APP" 2>/dev/nu
     exit 1
 fi
 
-echo "==> Packaging"
 ZIP="$ROOT/build/InvoiceGen-$VERSION.zip"
-rm -f "$ZIP"
-# ditto, not zip: it keeps the extended attributes carrying the signature.
-ditto -c -k --keepParent "$APP" "$ZIP"
+package() {
+    rm -f "$ZIP"
+    # ditto, not zip: it keeps the extended attributes carrying the signature.
+    ditto -c -k --keepParent "$APP" "$ZIP"
+}
+
+echo "==> Packaging"
+package
+
+# Notarization. Developer ID signing alone is NOT enough: the moment a browser
+# download puts a quarantine flag on the file, Gatekeeper asks Apple whether
+# the app was notarized, and an unnotarized app is refused outright with
+# "Apple could not verify ... is free of malware". Stapling attaches the
+# ticket so the check also works offline.
+NOTARY_PROFILE="${NOTARY_PROFILE:-InvoiceGen}"
+if [ "${SKIP_NOTARIZE:-0}" = "1" ]; then
+    echo "==> Skipping notarization (SKIP_NOTARIZE=1)"
+    echo "    Other Macs WILL refuse to open this build after downloading it."
+elif ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+    echo "error: no notarytool profile named '$NOTARY_PROFILE'." >&2
+    echo "       Create one with your Apple ID and an app-specific password:" >&2
+    echo "         xcrun notarytool store-credentials \"$NOTARY_PROFILE\" \\" >&2
+    echo "           --apple-id <your-apple-id> --team-id T7R6S9637T" >&2
+    echo "       Or set SKIP_NOTARIZE=1 to publish anyway -- but other Macs" >&2
+    echo "       will refuse to open the download." >&2
+    exit 1
+else
+    echo "==> Notarizing (this usually takes a few minutes)"
+    xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+
+    echo "==> Stapling the ticket to the app"
+    xcrun stapler staple "$APP"
+
+    # Stapling modifies the bundle, so the zip made before it has no ticket.
+    echo "==> Repackaging with the ticket attached"
+    package
+fi
 
 echo "==> Checking the packaged copy still verifies"
 VERIFY="$(mktemp -d)"
 ditto -x -k "$ZIP" "$VERIFY"
 codesign --verify --strict --deep "$VERIFY/InvoiceGen.app"
+echo "    signature round-trips through the zip intact"
+
+# The real test: would a Mac that just downloaded this actually open it?
+if [ "${SKIP_NOTARIZE:-0}" != "1" ]; then
+    if spctl -a -vv -t exec "$VERIFY/InvoiceGen.app" 2>&1 | grep -q "source=Notarized Developer ID"; then
+        echo "    Gatekeeper: accepted, Notarized Developer ID"
+    else
+        echo "error: the packaged app is not accepted by Gatekeeper:" >&2
+        spctl -a -vv -t exec "$VERIFY/InvoiceGen.app" 2>&1 | sed "s/^/       /" >&2
+        rm -rf "$VERIFY"
+        exit 1
+    fi
+fi
 rm -rf "$VERIFY"
-echo "    round-trips through the zip intact"
 
 echo "==> Tagging $TAG"
 git tag -a "$TAG" -m "InvoiceGen $VERSION"

@@ -318,6 +318,31 @@ has no signature to derive from.
 The only thing the check leaks is that some IP address asked GitHub for the
 latest release, once a day.
 
+### Notarization is not optional
+
+Developer ID signing alone is not enough. When a file arrives with a quarantine
+flag -- which anything downloaded through a browser has -- Gatekeeper asks Apple
+whether the app was notarized, and refuses an unnotarized one outright:
+
+> "InvoiceGen.app" Not Opened. Apple could not verify "InvoiceGen.app" is free
+> of malware that may harm your Mac or compromise your privacy.
+
+So `release.sh` notarizes, staples the ticket to the bundle, and then
+*repackages* -- stapling modifies the app, so a zip built before it carries no
+ticket. It then checks the packaged copy with `spctl` and refuses to publish
+unless Gatekeeper reports `source=Notarized Developer ID`. Stapling is what
+makes that check work without a network round trip on the receiving Mac.
+
+Credentials come from a notarytool keychain profile, never from the repo:
+
+```
+xcrun notarytool store-credentials "InvoiceGen" \
+  --apple-id <your-apple-id> --team-id T7R6S9637T
+```
+
+`NOTARY_PROFILE` picks a different profile name. `SKIP_NOTARIZE=1` publishes
+without it, which is only ever right for a build that stays on this Mac.
+
 ## Data
 
 Everything is stored at:
