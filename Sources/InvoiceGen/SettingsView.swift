@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @StateObject private var updater = UpdateController.shared
+    @StateObject private var customerSync = CustomerSync.shared
     @State private var publishTokenEntry = ""
     @State private var tokenSaved = false
 
@@ -25,6 +26,7 @@ struct SettingsView: View {
                     publishing
                     defaults
                     storage
+                    iCloud
                     updates
                 }
                 .padding(20)
@@ -558,6 +560,64 @@ struct SettingsView: View {
             .padding(6)
         } label: {
             Text("Data").font(.headline)
+        }
+    }
+
+    private var iCloud: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                if CustomerSync.isAvailable {
+                    Toggle("Keep customers in iCloud Drive", isOn: Binding(
+                        get: { customerSync.isEnabled },
+                        set: { newValue in
+                            customerSync.isEnabled = newValue
+                            if newValue { store.syncCustomers() }
+                        }
+                    ))
+                    Text("Your customer list is shared with your other Macs through "
+                         + "iCloud Drive. Invoices stay on this Mac, and payment details "
+                         + "stay in this Mac's encrypted vault — its key never leaves the "
+                         + "Keychain, so a shared vault could not be read anyway.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if customerSync.isEnabled {
+                        HStack(spacing: 8) {
+                            Button("Sync Now") { store.syncCustomers() }
+                                .controlSize(.small)
+                            if let error = customerSync.lastError {
+                                Label(error, systemImage: "exclamationmark.triangle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            } else if let when = customerSync.lastSynced {
+                                Text("Last synced \(when.formatted(date: .omitted, time: .shortened))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if let url = customerSync.fileURL {
+                            Text(url.path.replacingOccurrences(
+                                of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.tertiary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                } else {
+                    Label("iCloud Drive is not turned on for this Mac.",
+                          systemImage: "icloud.slash")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Text("Turn it on in System Settings ▸ Apple Account ▸ iCloud to share "
+                         + "your customer list between Macs.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(6)
+        } label: {
+            Text("iCloud").font(.headline)
         }
     }
 

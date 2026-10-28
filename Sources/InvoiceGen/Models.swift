@@ -164,6 +164,13 @@ struct Customer: Identifiable, Codable, Hashable {
     var country: String = ""
     var notes: String = ""
     var createdAt: Date = Date()
+    /// When this customer was last edited, used to settle iCloud merges.
+    /// Optional because Swift's synthesized decoder ignores default values
+    /// for missing keys -- a non-optional here would fail to decode every
+    /// customer already written to disk. Nil means "as old as createdAt".
+    var updatedAt: Date?
+
+    var changedAt: Date { updatedAt ?? createdAt }
 
     var displayName: String { name.isEmpty ? "Untitled customer" : name }
 

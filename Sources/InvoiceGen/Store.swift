@@ -296,6 +296,27 @@ final class AppStore: ObservableObject {
         // the lesser evil: dropping them would lose the user's data outright.
         // The UI says so loudly rather than pretending they are encrypted.
         writeDiskCopy(vaultSaved ? scrubbedForDisk() : data)
+
+        pushCustomersIfChanged()
+    }
+
+    /// Customers last handed to iCloud, so an invoice edit does not cause a
+    /// pointless write of an unchanged customer list.
+    private var lastPushedCustomers: [Customer]?
+
+    /// saveNow runs in a handful of non-isolated contexts, and iCloud touches
+    /// @AppStorage and @Published, so the hop to the main actor happens here
+    /// rather than forcing isolation up through every caller of saveNow.
+    private func pushCustomersIfChanged() {
+        Task { @MainActor [weak self] in
+            guard let self, CustomerSync.shared.isEnabled, CustomerSync.isAvailable else { return }
+            guard self.data.customers != self.lastPushedCustomers else { return }
+            self.lastPushedCustomers = self.data.customers
+            self.syncCustomers()
+            // syncCustomers may have merged in remote edits; record what we
+            // actually ended up with so the next save compares against that.
+            self.lastPushedCustomers = self.data.customers
+        }
     }
 
     private func writeDiskCopy(_ snapshot: AppData) {
@@ -659,10 +680,38 @@ final class AppStore: ObservableObject {
         return customer
     }
 
+    @MainActor
     func deleteCustomer(id: UUID) {
         data.customers.removeAll { $0.id == id }
         for index in data.invoices.indices where data.invoices[index].customerID == id {
             data.invoices[index].customerID = nil
+        }
+        // A tombstone, not just an absence: "missing here, present there" is
+        // otherwise indistinguishable from "new there", and the next merge
+        // would bring the customer straight back.
+        CustomerSync.shared.recordDeletion(of: id)
+    }
+
+    // MARK: - Customer sync
+
+    /// Merges the iCloud copy into ours and writes the union back. Safe to
+    /// call often: it is a no-op unless syncing is on and iCloud Drive exists.
+    @MainActor
+    func syncCustomers() {
+        guard let merged = CustomerSync.shared.sync(local: data.customers) else { return }
+        guard merged != data.customers else { return }
+        // Not an edit the user made, so it must not land on the undo stack as
+        // one -- and it must not be clobbered by a stale in-flight save.
+        commitHistory()
+        data.customers = merged
+        commitHistory()
+    }
+
+    /// Picks up edits made on another Mac while this one was open.
+    @MainActor
+    func startWatchingCustomerSync() {
+        CustomerSync.shared.startWatching { [weak self] in
+            self?.syncCustomers()
         }
     }
 
@@ -680,7 +729,10 @@ final class AppStore: ObservableObject {
             set: { [weak self] newValue in
                 guard let self,
                       let idx = self.data.customers.firstIndex(where: { $0.id == customerID }) else { return }
-                self.data.customers[idx] = newValue
+                guard self.data.customers[idx] != newValue else { return }
+                var stamped = newValue
+                stamped.updatedAt = Date()   // so iCloud can tell which copy is newer
+                self.data.customers[idx] = stamped
             }
         )
     }

@@ -813,6 +813,78 @@ struct InvoiceGenApp: App {
             }
             exit(0)
         }
+        if args.contains("--selftest-customer-sync") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            var failures = 0
+            func check(_ label: String, _ condition: Bool) {
+                print("  \(condition ? "ok  " : "FAIL") \(label)")
+                if !condition { failures += 1 }
+            }
+
+            // merge() is pure, so this touches no iCloud folder and no data file.
+            let early = Date(timeIntervalSince1970: 1_000_000)
+            let late = Date(timeIntervalSince1970: 2_000_000)
+            let later = Date(timeIntervalSince1970: 3_000_000)
+
+            func make(_ name: String, id: UUID, created: Date, updated: Date?) -> Customer {
+                var c = Customer()
+                c.id = id
+                c.name = name
+                c.createdAt = created
+                c.updatedAt = updated
+                return c
+            }
+
+            let idA = UUID(), idB = UUID(), idC = UUID()
+
+            print("union:")
+            let onlyLocal = make("Local Only", id: idA, created: early, updated: nil)
+            let onlyRemote = make("Remote Only", id: idB, created: early, updated: nil)
+            var merged = CustomerSync.merge(local: [onlyLocal], remote: [onlyRemote], deleted: [:])
+            check("keeps a customer only this Mac has", merged.contains { $0.id == idA })
+            check("picks up a customer only the other Mac has", merged.contains { $0.id == idB })
+
+            print("conflict — newer wins:")
+            let mine = make("Old Name", id: idC, created: early, updated: late)
+            let theirs = make("New Name", id: idC, created: early, updated: later)
+            merged = CustomerSync.merge(local: [mine], remote: [theirs], deleted: [:])
+            check("remote newer replaces local", merged.first { $0.id == idC }?.name == "New Name")
+            merged = CustomerSync.merge(local: [theirs], remote: [mine], deleted: [:])
+            check("local newer survives remote", merged.first { $0.id == idC }?.name == "New Name")
+            check("no duplicate rows", merged.filter { $0.id == idC }.count == 1)
+
+            print("missing updatedAt falls back to createdAt:")
+            let oldNoStamp = make("Older", id: idC, created: early, updated: nil)
+            let newNoStamp = make("Newer", id: idC, created: later, updated: nil)
+            merged = CustomerSync.merge(local: [oldNoStamp], remote: [newNoStamp], deleted: [:])
+            check("later createdAt wins", merged.first { $0.id == idC }?.name == "Newer")
+
+            print("tombstones:")
+            let doomed = make("Deleted Elsewhere", id: idA, created: early, updated: early)
+            merged = CustomerSync.merge(local: [doomed], remote: [],
+                                        deleted: [idA.uuidString: late])
+            check("a delete on the other Mac removes it here", merged.isEmpty)
+
+            let revived = make("Edited After Delete", id: idA, created: early, updated: later)
+            merged = CustomerSync.merge(local: [revived], remote: [],
+                                        deleted: [idA.uuidString: late])
+            check("an edit made after the delete brings it back", merged.count == 1)
+
+            merged = CustomerSync.merge(local: [onlyLocal], remote: [],
+                                        deleted: [UUID().uuidString: late])
+            check("an unrelated tombstone removes nothing", merged.count == 1)
+
+            print("ordering:")
+            let z = make("Zebra", id: UUID(), created: early, updated: nil)
+            let a = make("Apple", id: UUID(), created: early, updated: nil)
+            merged = CustomerSync.merge(local: [z], remote: [a], deleted: [:])
+            check("result is sorted by name", merged.map(\.name) == ["Apple", "Zebra"])
+
+            print(failures == 0 ? "customer sync self-test: all passed"
+                                : "customer sync self-test: \(failures) FAILED")
+            exit(failures == 0 ? 0 : 1)
+        }
+
         if args.contains("--selftest-bulk") {
             setvbuf(stdout, nil, _IONBF, 0)
             // Mutating test: never let it near the real data file.
@@ -1212,8 +1284,11 @@ struct InvoiceGenApp: App {
                 .frame(minWidth: 1120, minHeight: 640)
                 .onDisappear { store.saveNow() }
                 .task {
-                    // Off the launch path: a slow or unreachable GitHub must
-                    // never hold up the window appearing.
+                    // Off the launch path: neither a slow network nor an
+                    // iCloud file that has to be pulled down may hold up the
+                    // window appearing.
+                    store.syncCustomers()
+                    store.startWatchingCustomerSync()
                     try? await Task.sleep(for: .seconds(4))
                     UpdateController.shared.checkInBackgroundIfDue()
                 }
