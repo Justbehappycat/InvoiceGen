@@ -32,6 +32,7 @@ private func isolateDataDirectoryForDiagnostics() {
 struct InvoiceGenApp: App {
     @StateObject private var store = AppStore.shared
     @StateObject private var focus = AppFocus()
+    @StateObject private var updates = UpdateController.shared
 
     init() {
         // Headless render used for checking PDF output: InvoiceGen --render-sample out.pdf
@@ -812,6 +813,69 @@ struct InvoiceGenApp: App {
             }
             exit(0)
         }
+        if args.contains("--selftest-update") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            var failures = 0
+            func check(_ label: String, _ condition: Bool) {
+                print("  \(condition ? "ok  " : "FAIL") \(label)")
+                if !condition { failures += 1 }
+            }
+
+            print("version comparison:")
+            check("0.15.0 > 0.14.0", Updater.isNewer("0.15.0", than: "0.14.0"))
+            check("0.9.3 < 0.14.0", !Updater.isNewer("0.9.3", than: "0.14.0"))
+            check("1.0 == 1.0.0", !Updater.isNewer("1.0", than: "1.0.0"))
+            check("0.14.1 > 0.14.0", Updater.isNewer("0.14.1", than: "0.14.0"))
+            check("equal is not newer", !Updater.isNewer("0.14.0", than: "0.14.0"))
+
+            print("signing identity:")
+            let requirement = Updater.expectedRequirement()
+            check("derived from the running bundle", requirement != nil)
+            if let requirement {
+                print("    \(requirement)")
+                check("pins a team OU", requirement.contains("subject.OU"))
+                check("pins the Developer ID leaf OID",
+                      requirement.contains("1.2.840.113635.100.6.1.13"))
+            }
+
+            print("signature check:")
+            let own = Bundle.main.bundleURL
+            do {
+                try Updater.verifySignature(of: own)
+                check("accepts this very bundle", true)
+            } catch {
+                check("accepts this very bundle — \(error.localizedDescription)", false)
+            }
+
+            // The one that matters: a modified copy must be refused.
+            let work = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("invoicegen-tamper-\(UUID().uuidString)")
+            try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: work) }
+            let copy = work.appendingPathComponent("InvoiceGen.app")
+            do {
+                try FileManager.default.copyItem(at: own, to: copy)
+                try Updater.verifySignature(of: copy)   // an untouched copy is still fine
+                check("accepts an untouched copy", true)
+
+                // Flip a byte in the Info.plist and it must stop verifying.
+                let plist = copy.appendingPathComponent("Contents/Info.plist")
+                var text = try String(contentsOf: plist, encoding: .utf8)
+                text = text.replacingOccurrences(of: "<string>InvoiceGen</string>",
+                                                 with: "<string>EvilGen</string>")
+                try text.write(to: plist, atomically: true, encoding: .utf8)
+
+                var rejected = false
+                do { try Updater.verifySignature(of: copy) } catch { rejected = true }
+                check("REJECTS a tampered copy", rejected)
+            } catch {
+                check("tamper test could not run: \(error.localizedDescription)", false)
+            }
+
+            print(failures == 0 ? "update self-test: all passed" : "update self-test: \(failures) FAILED")
+            exit(failures == 0 ? 0 : 1)
+        }
+
         if args.contains("--selftest-publish") {
             setvbuf(stdout, nil, _IONBF, 0)
             _ = NSApplication.shared
@@ -1075,6 +1139,12 @@ struct InvoiceGenApp: App {
                 .environmentObject(focus)
                 .frame(minWidth: 1120, minHeight: 640)
                 .onDisappear { store.saveNow() }
+                .task {
+                    // Off the launch path: a slow or unreachable GitHub must
+                    // never hold up the window appearing.
+                    try? await Task.sleep(for: .seconds(4))
+                    UpdateController.shared.checkInBackgroundIfDue()
+                }
         }
         .defaultSize(width: 1440, height: 900)
         .windowResizability(.contentMinSize)
@@ -1086,6 +1156,13 @@ struct InvoiceGenApp: App {
                 Button("Redo") { store.redo() }
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!store.canRedo)
+            }
+
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    UpdateController.shared.checkManually()
+                }
+                .disabled(updates.isBusy)
             }
 
             CommandGroup(replacing: .appSettings) {

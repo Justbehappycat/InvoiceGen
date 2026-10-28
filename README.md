@@ -258,6 +258,66 @@ same menu updates the published copy or unpublishes it.
   login Keychain, never on disk in the clear.
 - The Worker, its tests and the deployment steps are in [`web/`](web/README.md).
 
+## Updates
+
+The app can update itself from GitHub Releases, so a fix pushed from one Mac
+reaches the others without copying bundles around by hand.
+
+Cutting a release — bump `VERSION`, commit, then:
+
+```
+./release.sh
+```
+
+That builds, signs, zips with `ditto`, re-verifies the signature after the zip
+round-trip, tags, and publishes the release with notes taken from the commits
+since the last tag (or `RELEASE_NOTES` if set).
+
+On the receiving end the app checks at most once a day, in the background, four
+seconds after launch so a slow network can never delay the window. A background
+check that cannot reach GitHub stays silent — an offline app should not nag
+about being offline. `InvoiceGen ▸ Check for Updates…` always asks regardless,
+and reports being up to date. Settings ▸ Updates turns the automatic check off.
+
+Nothing installs on its own. You are shown the version and its notes, and the
+download only starts if you agree.
+
+### Why this is safe to have at all
+
+An updater is a remote code execution channel into a machine holding your
+payment details, so the whole design rests on one check: the downloaded bundle
+must satisfy
+
+```
+identifier "com.finecut.invoicegen" and anchor apple generic
+  and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */
+  and certificate leaf[subject.OU] = "T7R6S9637T"
+```
+
+That requirement is not written down in the source. It is *derived at runtime
+from the running app's own signature*, so it cannot drift away from the real
+identity, and a build that is unsigned or ad-hoc refuses to self-update at all
+rather than installing code it cannot check. The check runs before anything is
+installed, uses `kSecCSCheckNestedCode` so it covers everything inside the
+bundle rather than just the main executable, and a failure discards the
+download.
+
+Three further constraints:
+
+- The asset must be a `.zip` served over HTTPS from a `github.com` host.
+- Extraction uses `ditto`, not `unzip`, which discards the extended attributes
+  carrying the signature and would make every download look tampered with.
+- The verified bundle must also *claim* a newer version in its own Info.plist,
+  so an older release cannot be replayed at you.
+
+`--selftest-update` exercises all of it, including copying the running app,
+editing a byte of its Info.plist, and confirming the check rejects the result.
+Run it from the built bundle, not `.build/release`, since an unbundled binary
+has no signature to derive from.
+
+The only thing the check leaks is that some IP address asked GitHub for the
+latest release, once a day.
+
 ## Data
 
 Everything is stored at:

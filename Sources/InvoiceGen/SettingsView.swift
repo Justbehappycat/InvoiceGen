@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
+    @StateObject private var updater = UpdateController.shared
     @State private var publishTokenEntry = ""
     @State private var tokenSaved = false
 
@@ -24,6 +25,7 @@ struct SettingsView: View {
                     publishing
                     defaults
                     storage
+                    updates
                 }
                 .padding(20)
                 .frame(maxWidth: 640, alignment: .leading)
@@ -556,6 +558,34 @@ struct SettingsView: View {
             .padding(6)
         } label: {
             Text("Data").font(.headline)
+        }
+    }
+
+    private var updates: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Check for updates automatically", isOn: $updater.automaticChecks)
+                Text("Checks GitHub at most once a day and never installs anything on its own — "
+                     + "you are always asked first. Turn this off to keep the app fully offline.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Check Now…") { updater.checkManually() }
+                        .disabled(updater.isBusy)
+                    if updater.isBusy {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                Text("An update is only installed if it is signed by the same Developer ID as this "
+                     + "copy. Anything else is refused and discarded.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        } label: {
+            Text("Updates").font(.headline)
         }
     }
 
