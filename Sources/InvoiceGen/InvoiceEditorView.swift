@@ -154,7 +154,7 @@ struct InvoiceEditorView: View {
         .controlSize(.regular)
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .liquidGlassBar()
     }
 
     /// Publishing puts the invoice behind a link a client can open. Always

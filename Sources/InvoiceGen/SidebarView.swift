@@ -322,7 +322,7 @@ struct SidebarView: View {
             .padding(.vertical, 6)
             Divider()
         }
-        .background(.bar)
+        .liquidGlassBar()
     }
 
     private var summaryBar: some View {
@@ -348,7 +348,7 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.bar)
+        .liquidGlassBar()
         .overlay(alignment: .top) { Divider() }
     }
 
@@ -401,7 +401,7 @@ struct SidebarView: View {
                 .padding(.vertical, 6)
                 Divider()
             }
-            .background(.bar)
+            .liquidGlassBar()
         }
         .searchable(text: $search, placement: .sidebar, prompt: "Search customers")
     }

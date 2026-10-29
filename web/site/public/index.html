@@ -55,7 +55,10 @@ h1{font-size:46px; line-height:1.1; letter-spacing:-.025em; margin:0 0 14px; fon
 .reassure{margin-top:7px; font-size:13.5px; color:var(--faint)}
 
 /* shot */
-.shot{margin:46px 0 0}
+/* `margin:46px auto 0`, not `46px 0 0`: .shot sits on the same element as
+   .wrap and comes later, so a shorthand with 0 side margins silently wipes
+   out .wrap's `margin:0 auto` and left-aligns the whole block. */
+.shot{margin:46px auto 0; max-width:1240px}
 .shot img{width:100%; border:1px solid var(--line); border-radius:var(--radius);
   box-shadow:0 22px 60px rgba(0,0,0,.13); display:block}
 .caption{text-align:center; font-size:13px; color:var(--faint); margin-top:11px}

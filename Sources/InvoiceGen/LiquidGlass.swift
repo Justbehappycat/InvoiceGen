@@ -20,6 +20,18 @@ extension View {
         }
     }
 
+    /// Full-bleed glass for chrome that floats over scrolling content --
+    /// toolbars and the sidebar's filter and summary bars. A Rectangle rather
+    /// than a rounded shape, because these run edge to edge.
+    @ViewBuilder
+    func liquidGlassBar() -> some View {
+        if #available(macOS 26.0, *) {
+            self.glassEffect(.regular, in: Rectangle())
+        } else {
+            self.background(.bar)
+        }
+    }
+
     /// For controls sitting on top of glass.
     @ViewBuilder
     func liquidGlassButton(prominent: Bool = false) -> some View {
