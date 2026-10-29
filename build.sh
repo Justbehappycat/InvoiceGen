@@ -27,6 +27,23 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$(swift build -c release --show-bin-path)/InvoiceGen" "$APP/Contents/MacOS/InvoiceGen"
 
+# macOS decides whether an app gets the current design -- Liquid Glass, the
+# current window controls, the current control metrics -- from the SDK version
+# recorded in LC_BUILD_VERSION, not from the SDK on disk. SwiftPM derives that
+# field from the platform in Package.swift, so declaring .macOS(.v13) records
+# "sdk 13.0" even though the build used the 27 SDK, and the app is handed the
+# legacy appearance.
+#
+# vtool records the SDK actually used while leaving minos alone, so the app
+# still runs on macOS 13. This runs before signing, since it rewrites the
+# binary. Harmless if the SDK is older than 26: it just records that instead.
+SDK_VERSION="$(xcrun --show-sdk-version --sdk macosx 2>/dev/null || echo '')"
+if [ -n "$SDK_VERSION" ]; then
+    vtool -set-build-version macos 13.0 "$SDK_VERSION" -replace \
+        -output "$APP/Contents/MacOS/InvoiceGen" "$APP/Contents/MacOS/InvoiceGen" 2>/dev/null
+    echo "    linked SDK recorded as $SDK_VERSION (minos stays 13.0)"
+fi
+
 echo "==> Building icon"
 WORK="$(mktemp -d)"
 swiftc -O "$ROOT/Tools/MakeIcon.swift" -o "$WORK/makeicon"
