@@ -93,6 +93,38 @@ if [ "${SKIP_NOTARIZE:-0}" != "1" ]; then
 fi
 rm -rf "$VERIFY"
 
+# The landing page prints the version and size next to its download button,
+# and the download URL carries the filename. All three go stale the moment a
+# new version ships, so rewrite them here rather than trusting anyone to
+# remember. Markers in the HTML (data-version, data-size, data-download) make
+# this a targeted edit instead of a guess at prose.
+PAGE="$ROOT/web/site/public/index.html"
+if [ -f "$PAGE" ]; then
+    echo "==> Updating the landing page"
+    SIZE_MB="$(python3 -c "import os;print(f'{os.path.getsize(\"$ZIP\")/1048576:.1f}')")"
+    python3 - "$PAGE" "$VERSION" "$SIZE_MB" "$(basename "$ZIP")" <<'PYEOF'
+import re, sys
+path, version, size, filename = sys.argv[1:5]
+with open(path) as f:
+    html = f.read()
+before = html
+html = re.sub(r'(<span data-version>)[^<]*(</span>)', rf'\g<1>{version}\g<2>', html)
+html = re.sub(r'(<span data-size>)[^<]*(</span>)', rf'\g<1>{size}&nbsp;MB\g<2>', html)
+html = re.sub(r'(data-download href="https://github\.com/[^"]*/releases/latest/download/)[^"]*(")',
+              rf'\g<1>{filename}\g<2>', html)
+if html != before:
+    with open(path, 'w') as f:
+        f.write(html)
+    print(f"    version {version}, {size} MB, {filename}")
+else:
+    print("    already current")
+PYEOF
+    if [ -n "$(git status --porcelain "$PAGE")" ]; then
+        git add "$PAGE"
+        git commit -q -m "Landing page: version $VERSION"
+    fi
+fi
+
 echo "==> Tagging $TAG"
 git tag -a "$TAG" -m "InvoiceGen $VERSION"
 git push origin "$TAG"

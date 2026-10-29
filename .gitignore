@@ -9,3 +9,6 @@ build/
 # kept locally as design reference — not part of the source).
 Wave • Finecut Studio LLC • Invoices.html
 Wave • Finecut Studio LLC • Invoices_files/
+
+# wrangler local state (contains account ids)
+.wrangler/

@@ -69,6 +69,10 @@ h2{font-size:26px; letter-spacing:-.018em; margin:0 0 10px; font-weight:650}
 .card h3{margin:0 0 7px; font-size:16px; font-weight:620}
 .card p{margin:0; color:var(--muted); font-size:14.5px; line-height:1.6}
 
+figure.mark{margin:0 0 26px}
+figure.mark img{width:100%; display:block; border:1px solid var(--line); border-radius:var(--radius)}
+figure.mark figcaption{font-size:13px; color:var(--faint); margin-top:10px; text-align:center}
+
 .note{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px 24px}
 .note p{margin:0 0 12px} .note p:last-child{margin:0}
 .note code{font-family:var(--mono); font-size:13px; background:var(--bg); border:1px solid var(--line);
@@ -106,10 +110,10 @@ footer .spacer{flex:1}
     InvoiceGen writes, prints and tracks invoices entirely offline. No account,
     no subscription, no server holding your clients and your bank details.
   </p>
-  <a class="cta" id="download" href="https://github.com/Justbehappycat/InvoiceGen/releases/latest/download/InvoiceGen-0.15.0.zip">
+  <a class="cta" id="download" data-download href="https://github.com/Justbehappycat/InvoiceGen/releases/latest/download/InvoiceGen-0.15.0.zip">
     Download for macOS
   </a>
-  <div class="meta">Version 0.15.0 · 1.5&nbsp;MB · macOS 13 or later · Apple silicon &amp; Intel</div>
+  <div class="meta">Version <span data-version>0.15.0</span> · <span data-size>1.5&nbsp;MB</span> · macOS 13 or later · Apple silicon &amp; Intel</div>
   <div class="reassure">Signed and notarized by Apple. Free and open source.</div>
 </div></header>
 
@@ -143,6 +147,10 @@ footer .spacer{flex:1}
     An invoice is a financial document, and a PDF is trivially editable. InvoiceGen prints a
     verification mark into the design itself.
   </p>
+  <figure class="mark">
+    <img src="assets/verification-mark.png" alt="An invoice banner with faint vertical stripes of varying width woven through it, reading INVOICE on the left and Amount Due $6,080.00 on the right">
+    <figcaption>The stripes are the signature. Sample invoice, not a real one.</figcaption>
+  </figure>
   <div class="note">
     <p>
       The mark is an HMAC-SHA256 signature over four fields — invoice number, date, total quantity

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+  // Cloudflare Pages is now served by Workers, so the landing page deploys as
+  // a static-assets Worker: no `main`, just a directory.
+  //
+  // This file also stops wrangler walking up and finding web/wrangler.toml --
+  // the dormant Worker from the old publish-by-link feature -- whose
+  // placeholder KV id made the deploy fail.
+  "name": "invoicegen",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "./public"
+  },
+  // A custom domain, not a route pattern: Cloudflare creates and owns the DNS
+  // record for it, which is what we want -- the previous attempt at this
+  // subdomain left a dangling record behind when its Worker was deleted.
+  "routes": [
+    { "pattern": "invoice.finecut.com", "custom_domain": true }
+  ]
+}
