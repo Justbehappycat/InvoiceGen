@@ -21,7 +21,6 @@ struct VerifyInvoiceView: View {
 
             HStack(spacing: 8) {
                 TextField("IG1-11-4A7C9E2B", text: $entry)
-                    .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .onSubmit(verify)
                 Button("Verify", action: verify)
@@ -118,7 +117,7 @@ struct VerifyInvoiceView: View {
         }
         .padding(12)
         .background(tint.opacity(0.08))
-        .clipShape(.rect(cornerRadius: 8))
+        .clipShape(.rect(cornerRadius: Metrics.cornerPanel))
     }
 
     private func verify() {

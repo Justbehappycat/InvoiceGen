@@ -30,11 +30,15 @@ struct InvoiceEditorView: View {
             actionBar
             Divider()
             HSplitView {
+                // Both panes state a real minimum and keep their own scroll
+                // view, so dragging the divider runs out of room instead of
+                // crushing either side. No layout priority: giving the form
+                // one lets it swallow the preview whole.
                 form
-                    .frame(minWidth: 520, idealWidth: 560)
+                    .frame(minWidth: 520, idealWidth: 580)
                 if showPreview {
                     DocumentPreview(invoice: invoice, customer: customer, business: business)
-                        .frame(minWidth: 300, idealWidth: 520)
+                        .frame(minWidth: 360, idealWidth: 520)
                 }
             }
         }
@@ -564,6 +568,7 @@ struct InvoiceEditorView: View {
                     } label: {
                         Label("Add item", systemImage: "plus")
                     }
+                    .controlSize(.small)
 
                     if !store.data.catalog.isEmpty {
                         Menu {
@@ -575,6 +580,7 @@ struct InvoiceEditorView: View {
                         } label: {
                             Label("Add saved item", systemImage: "shippingbox")
                         }
+                        .controlSize(.small)
                         .fixedSize()
                     }
                     Spacer()
@@ -637,8 +643,8 @@ struct InvoiceEditorView: View {
                 .disabled(invoice.amountPaid == invoice.total)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Divider().padding(.vertical, 2)
+            VStack(alignment: .leading, spacing: 6) {
+                Divider().padding(.vertical, 6)
                 summaryRow("Subtotal", invoice.subtotal, tint: .secondary)
                 summaryRow("Total", invoice.total, tint: .primary)
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -762,7 +768,6 @@ struct InvoiceEditorView: View {
             // reserving 130pt of empty box on an invoice that has no terms.
             TextField("Notes and terms", text: $invoice.notes, axis: .vertical)
                 .lineLimit(3...14)
-                .textFieldStyle(.roundedBorder)
 
             FormRow(label: "Footer") {
                 TextField("It was a pleasure working with you!",
@@ -803,7 +808,7 @@ struct LineItemRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 TextField("Item name", text: $item.title)
                 TextField("Description (optional)", text: $item.details, axis: .vertical)
                     .lineLimit(1...4)
@@ -811,6 +816,7 @@ struct LineItemRow: View {
                 Toggle("Taxable", isOn: $item.taxable)
                     .toggleStyle(.checkbox)
                     .font(.caption)
+                    .padding(.top, 1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -844,7 +850,7 @@ struct LineItemRow: View {
             .menuIndicator(.hidden)
             .frame(width: 50)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 7)
         .sheet(item: $proposal) { proposal in
             TidyReview(item: item, proposal: proposal) { accepted in
                 if accepted {

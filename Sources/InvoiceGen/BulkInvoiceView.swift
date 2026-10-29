@@ -124,7 +124,7 @@ struct BulkInvoiceView: View {
                 }
             }
             .padding(12)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .liquidGlass(in: RoundedRectangle(cornerRadius: Metrics.cornerGlass, style: .continuous))
         }
     }
 

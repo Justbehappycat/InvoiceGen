@@ -67,7 +67,7 @@ struct CustomerDetailView: View {
                 GroupBox {
                     TextEditor(text: $customer.notes)
                         .frame(height: 90)
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
+                        .overlay(RoundedRectangle(cornerRadius: Metrics.corner).stroke(Color.secondary.opacity(0.3)))
                         .padding(6)
                 } label: {
                     Text("Internal notes").font(.headline)

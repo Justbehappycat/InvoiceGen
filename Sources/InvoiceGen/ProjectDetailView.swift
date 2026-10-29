@@ -101,7 +101,6 @@ struct ProjectDetailView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Project name", text: $project.name)
-                    .textFieldStyle(.roundedBorder)
 
                 HStack {
                     Picker("Client", selection: $project.customerID) {
@@ -311,7 +310,6 @@ struct ProjectDetailView: View {
             TextField("Anything worth remembering about this job", text: $project.notes,
                       axis: .vertical)
                 .lineLimit(2...8)
-                .textFieldStyle(.roundedBorder)
                 .padding(6)
         } label: {
             Text("Notes").font(.headline)

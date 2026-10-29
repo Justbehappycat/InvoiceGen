@@ -13,8 +13,9 @@ enum Metrics {
     static let gutter: CGFloat = 18
     /// Between one section and the next.
     static let sectionGap: CGFloat = 20
-    /// Between rows inside a section.
-    static let rowGap: CGFloat = 8
+    /// Between rows inside a section. Ten rather than eight: at eight the
+    /// totals and the line-item description read as one dense block.
+    static let rowGap: CGFloat = 10
     /// Every label in the editor is this wide, so the fields beside them form
     /// one column from Customer all the way down to Totals.
     static let labelWidth: CGFloat = 96
@@ -22,6 +23,16 @@ enum Metrics {
     static let fieldWidth: CGFloat = 128
     /// Where money lines up on the right.
     static let amountWidth: CGFloat = 104
+
+    // Three corner radii for the whole app, so a text box, a panel and a
+    // glass surface each have one answer instead of five. These replaced a
+    // scatter of 5, 6, 8, 16 and 20 that had no rule behind it.
+    /// Text boxes and other small inset surfaces.
+    static let corner: CGFloat = 6
+    /// Panels, popovers and cards.
+    static let cornerPanel: CGFloat = 10
+    /// Glass surfaces, which read as thicker and want a larger curve.
+    static let cornerGlass: CGFloat = 16
 }
 
 /// A quiet section heading. Secondary and small on purpose: the content is

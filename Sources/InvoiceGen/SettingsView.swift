@@ -113,7 +113,7 @@ struct SettingsView: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                         } else {
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: Metrics.corner)
                                 .fill(Color.secondary.opacity(0.15))
                                 .overlay(Text("No logo").font(.caption).foregroundStyle(.secondary))
                         }
@@ -520,7 +520,7 @@ struct SettingsView: View {
                 Text("Default notes / terms (anything beyond payment details)").font(.callout)
                 TextEditor(text: business.defaultNotes)
                     .frame(height: 150)
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
+                    .overlay(RoundedRectangle(cornerRadius: Metrics.corner).stroke(Color.secondary.opacity(0.3)))
 
                 Text("Default footer message").font(.callout)
                 TextField("", text: business.defaultFooterMessage)
