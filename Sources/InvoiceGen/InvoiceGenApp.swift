@@ -1126,6 +1126,87 @@ struct InvoiceGenApp: App {
                   IntegerField.value(for: "42", minimum: 0) == 42 ? "ok" : "FAILED")
             exit(0)
         }
+        if args.contains("--selftest-assist") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            var failed = false
+            func check(_ name: String, _ passed: Bool) {
+                print("  " + name.padding(toLength: 52, withPad: " ", startingAt: 0)
+                      + (passed ? "ok" : "FAILED"))
+                if !passed { failed = true }
+            }
+
+            // The guard that keeps rule 2 — the model may reword, never
+            // re-price. These run with no model and must hold regardless.
+            check("digits pulled out of \"2 x EP10\"",
+                  OnDeviceAssist.digitRuns(in: "2 x EP10") == ["2", "10"])
+            check("prose has no digits",
+                  OnDeviceAssist.digitRuns(in: "Episode one edit").isEmpty)
+
+            let guardCases: [(String, String, Bool)] = [
+                ("ep1 edit", "Episode 1 Edit", false),
+                ("ep1 edit", "Episode 1 Edit, 2 revisions", true),   // invented "2"
+                ("edit", "Edit — $400", true),                       // invented a price
+                // Both of these were real first drafts from the model.
+                ("ep1 edit", "Episode Edit", true),                  // dropped the episode
+                ("2 rounds at ep1", "Two rounds, Episode 1", true),  // spelled "2" out
+                ("ep1 ep2", "Episode 1", true),                      // lost one of two
+                ("Long x1 Short x1", "Long x1 Short x1", false),
+                ("", "", false),
+            ]
+            for (source, result, expected) in guardCases {
+                let actual = OnDeviceAssist.changesNumbers(source: source, result: result)
+                let label = "\"\(result)\" from \"\(source)\""
+                check(label.padding(toLength: min(label.count, 44), withPad: " ", startingAt: 0)
+                      + " moves a number: \(actual)", actual == expected)
+            }
+
+            // Readiness must answer on any Mac, including one with no Apple
+            // Intelligence, without throwing or blocking.
+            let readiness = OnDeviceAssist.readiness
+            print("  readiness: \(readiness)")
+            check("readiness explains itself when unavailable",
+                  readiness == .ready || readiness.explanation != nil)
+
+            // A real round trip, only where the model exists. Non-deterministic
+            // wording, so this asserts the contract, not the prose.
+            if readiness == .ready {
+                // Pump the run loop rather than block on it: the model's work
+                // needs the main thread to keep turning, so waiting on a
+                // semaphore here deadlocks until the timeout.
+                nonisolated(unsafe) var live: Result<OnDeviceAssist.Proposal, Error>?
+                Task {
+                    do {
+                        live = .success(try await OnDeviceAssist.tidy(
+                            title: "ep1 edit + colour pass",
+                            details: "long x1 short x1",
+                            heading: "Item"))
+                    } catch { live = .failure(error) }
+                }
+                let deadline = Date().addingTimeInterval(90)
+                while live == nil, Date() < deadline {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+                }
+                if live == nil {
+                    check("on-device tidy answers within 90s", false)
+                } else if case .success(let proposal) = live {
+                    print("  model returned: \"\(proposal.title)\" / \"\(proposal.details)\"")
+                    check("tidy returns a name", !proposal.title.isEmpty)
+                    check("tidy moved no numbers",
+                          !OnDeviceAssist.changesNumbers(
+                            source: "ep1 edit + colour pass long x1 short x1",
+                            result: proposal.title + " " + proposal.details))
+                } else if case .failure(let error) = live {
+                    // A rejected suggestion is the guard working, not a failure.
+                    let rejected = (error as? OnDeviceAssist.Failure) == .changedNumbers
+                    print("  model call failed: \(error.localizedDescription)")
+                    check("failure was the guard, not a crash", rejected)
+                }
+            } else {
+                print("  (no on-device model here — skipping the live call)")
+            }
+
+            exit(failed ? 1 : 0)
+        }
         if args.contains("--selftest-columns") {
             _ = NSApplication.shared
             let store = AppStore.shared

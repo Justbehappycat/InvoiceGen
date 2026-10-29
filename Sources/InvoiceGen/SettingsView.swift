@@ -8,6 +8,7 @@ struct SettingsView: View {
     @StateObject private var customerSync = CustomerSync.shared
     @State private var publishTokenEntry = ""
     @State private var tokenSaved = false
+    @AppStorage("onDeviceAssist") private var onDeviceAssist = true
 
     private var business: Binding<BusinessProfile> {
         Binding(get: { store.data.business }, set: { store.data.business = $0 })
@@ -27,6 +28,7 @@ struct SettingsView: View {
                     defaults
                     storage
                     iCloud
+                    assist
                     updates
                 }
                 .padding(20)
@@ -626,6 +628,40 @@ struct SettingsView: View {
             .padding(6)
         } label: {
             Text("iCloud").font(.headline)
+        }
+    }
+
+    private var assist: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Offer to tidy up item wording", isOn: $onDeviceAssist)
+                Text("Adds \"Tidy up wording\" to a line item's menu. Apple's model runs on "
+                     + "this Mac — nothing is sent anywhere, and it works with no network at all.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: OnDeviceAssist.isReady
+                          ? "checkmark.seal.fill" : "exclamationmark.circle")
+                        .foregroundStyle(OnDeviceAssist.isReady ? .green : .secondary)
+                        .accessibilityHidden(true)
+                    Text(OnDeviceAssist.readiness.explanation
+                         ?? "Ready. Suggestions are always shown before anything changes.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text("It rewords only. Quantity, price and the total are never touched, and a "
+                     + "suggestion that changes a number is discarded instead of shown.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(6)
+        } label: {
+            Text("On-device assist").font(.headline)
         }
     }
 

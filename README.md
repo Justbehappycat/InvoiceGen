@@ -241,6 +241,29 @@ unconfigured or plain-http address refuses to publish at all.
   invoices start from these.
 - Next invoice number, data-file location, backup and restore.
 
+**On-device assist** (macOS 26 or later, Apple Intelligence on)
+- "Tidy up wording" in a line item's menu rewrites shorthand into something a
+  client reads cleanly: `ep1 edit + colour pass` / `long x1 short x1` becomes
+  `Episode 1 Edit + Colour Pass` / `Long x1 Short x1`.
+- **It runs on this Mac.** Apple's `SystemLanguageModel`, offline, no account,
+  nothing sent anywhere. The same framework offers a Private Cloud Compute model
+  that *would* send the text to Apple; it is never used, and `build.sh` refuses
+  to build if its name appears outside a comment.
+- **It rewords; it never re-prices.** Quantity, price and totals are untouched —
+  the model is handed two text fields and returns two text fields. Any
+  suggestion whose numbers differ from the input's, in either direction, is
+  discarded rather than shown: inventing `$400` and quietly turning `ep1 edit`
+  into `Episode Edit` are both failures, and the second was a real first draft.
+- **Nothing is applied unseen.** The suggestion appears beside what you wrote,
+  struck through, and you choose. Undo covers it like any other edit.
+- The model fills a typed Swift value through guided generation, so there is no
+  free text to parse and no malformed answer to handle.
+- Turn it off in Settings. Below macOS 26 the framework is weak-linked and the
+  feature is simply absent — the app still runs on macOS 13.
+- `--selftest-assist` covers the number guard deterministically (no model
+  needed) and, where a model exists, makes one real call and checks the
+  contract rather than the prose.
+
 ## Publishing an invoice as a link
 
 > Off, and nothing is deployed. The Worker that served `invoice.finecut.com`

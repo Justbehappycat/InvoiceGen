@@ -423,6 +423,7 @@ struct InvoiceEditorView: View {
                     LineItemRow(
                         item: $item,
                         currencyCode: invoice.currencyCode,
+                        itemHeading: invoice.columns.itemHeading,
                         canDelete: invoice.items.count > 1,
                         onDelete: { invoice.items.removeAll { $0.id == item.id } },
                         onSaveToCatalog: {
@@ -639,10 +640,17 @@ struct InvoiceEditorView: View {
 struct LineItemRow: View {
     @Binding var item: LineItem
     let currencyCode: String
+    /// Passed to the on-device model so "Hours" and "Items" read differently.
+    var itemHeading: String = "Item"
     /// An invoice always keeps at least one line.
     var canDelete: Bool = true
     let onDelete: () -> Void
     let onSaveToCatalog: () -> Void
+
+    @AppStorage("onDeviceAssist") private var assistEnabled = true
+    @State private var proposal: OnDeviceAssist.Proposal?
+    @State private var isTidying = false
+    @State private var assistError: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -668,11 +676,19 @@ struct LineItemRow: View {
                 .padding(.top, 3)
 
             Menu {
+                if assistEnabled, OnDeviceAssist.isReady {
+                    Button("Tidy up wording", action: tidy)
+                        .disabled(isTidying || item.title.isEmpty)
+                }
                 Button("Save to items library", action: onSaveToCatalog)
                 Button("Remove line", role: .destructive, action: onDelete)
                     .disabled(!canDelete)
             } label: {
-                Label("Line actions", systemImage: "ellipsis.circle")
+                if isTidying {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("Line actions", systemImage: "ellipsis.circle")
+                }
             }
             .labelStyle(.iconOnly)
             .menuStyle(.borderlessButton)
@@ -680,6 +696,92 @@ struct LineItemRow: View {
             .frame(width: 50)
         }
         .padding(.vertical, 4)
+        .sheet(item: $proposal) { proposal in
+            TidyReview(item: item, proposal: proposal) { accepted in
+                if accepted {
+                    item.title = proposal.title
+                    item.details = proposal.details
+                }
+                self.proposal = nil
+            }
+        }
+        .alert("Couldn't tidy this line",
+               isPresented: Binding(get: { assistError != nil },
+                                    set: { if !$0 { assistError = nil } })) {
+            Button("OK", role: .cancel) { assistError = nil }
+        } message: {
+            Text(assistError ?? "")
+        }
+    }
+
+    /// The model only ever proposes. Applying is the sheet's job, and undo
+    /// covers it like any other edit.
+    private func tidy() {
+        isTidying = true
+        Task {
+            defer { isTidying = false }
+            do {
+                let suggested = try await OnDeviceAssist.tidy(
+                    title: item.title, details: item.details, heading: itemHeading
+                )
+                if suggested.changes(from: item) {
+                    proposal = suggested
+                } else {
+                    assistError = "This line already reads clearly."
+                }
+            } catch {
+                assistError = error.localizedDescription
+            }
+        }
+    }
+}
+
+/// Shows what the model suggests beside what is already there. The user
+/// approves the change; nothing is written before that.
+private struct TidyReview: View {
+    let item: LineItem
+    let proposal: OnDeviceAssist.Proposal
+    let finish: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Tidy up wording").font(.headline)
+            Text("Suggested by the model on this Mac. Nothing was sent anywhere, "
+                 + "and the quantity, price and total are untouched.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            comparison("Name", before: item.title, after: proposal.title)
+            if !item.details.isEmpty || !proposal.details.isEmpty {
+                comparison("Description", before: item.details, after: proposal.details)
+            }
+
+            HStack {
+                Spacer()
+                Button("Keep mine") { finish(false) }
+                    .keyboardShortcut(.cancelAction)
+                Button("Use this") { finish(true) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    @ViewBuilder
+    private func comparison(_ label: String, before: String, after: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(before.isEmpty ? "—" : before)
+                .strikethrough(before != after)
+                .foregroundStyle(before == after ? .primary : .secondary)
+            if before != after {
+                Text(after.isEmpty ? "—" : after)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

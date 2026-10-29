@@ -19,6 +19,18 @@ else
 fi
 echo "==> InvoiceGen $VERSION (build $BUILD, $COMMIT)"
 
+# The whole app promises nothing leaves this Mac, and FoundationModels offers a
+# Private Cloud Compute model alongside the on-device one. Reaching for it would
+# break that promise in a way no test would notice, so the build refuses it.
+# Comment lines are allowed to name it — that is how the rule is documented.
+PCC="$(grep -rn "PrivateCloudCompute" "$ROOT/Sources" 2>/dev/null \
+       | grep -v ':[0-9]*:[[:space:]]*//' || true)"
+if [ -n "$PCC" ]; then
+    echo "error: Sources use PrivateCloudCompute — this app is on-device only." >&2
+    echo "$PCC" >&2
+    exit 1
+fi
+
 echo "==> Compiling (release)"
 swift build -c release
 
