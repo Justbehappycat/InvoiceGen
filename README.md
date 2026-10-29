@@ -8,8 +8,13 @@ lives in a single JSON file on your Mac.
 
 ```bash
 ./build.sh
-cp -R build/InvoiceGen.app /Applications/
+rm -rf /Applications/InvoiceGen.app && ditto build/InvoiceGen.app /Applications/InvoiceGen.app
 ```
+
+Replace the installed app rather than copying over it. `cp -R` overwrites files in
+place and reuses their inodes, so the kernel validates the new bytes against the
+signature it already cached for that location and kills the app on launch with
+`Invalid Page`. `ditto` onto a removed bundle avoids that and preserves xattrs.
 
 Requires Xcode command line tools (Swift 5.9+). macOS 13 or newer.
 

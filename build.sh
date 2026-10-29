@@ -119,4 +119,7 @@ echo "    designated requirement:"
 codesign -d -r- "$APP" 2>/dev/null | sed -n "s/^designated => /      /p"
 
 echo "==> Done: $APP"
-echo "    Install with:  cp -R \"$APP\" /Applications/"
+# Replace, never overwrite in place: cp reuses the existing inodes, and the
+# kernel then checks the new bytes against the signature it already cached
+# for that vnode, killing the app with "Invalid Page" on first launch.
+echo "    Install with:  rm -rf /Applications/InvoiceGen.app && ditto \"$APP\" /Applications/InvoiceGen.app"
