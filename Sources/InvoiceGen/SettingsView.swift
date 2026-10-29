@@ -190,6 +190,7 @@ struct SettingsView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: store.hasVerificationPassphrase ? "barcode" : "barcode.viewfinder")
                         .foregroundStyle(store.hasVerificationPassphrase ? .green : .secondary)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(store.hasVerificationPassphrase
                              ? "Invoices carry a verification code."
@@ -309,6 +310,7 @@ struct SettingsView: View {
             let tone = store.data.business.verificationBarTone
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "app.badge.checkmark").foregroundStyle(.green)
+                    .accessibilityHidden(true)
                 Text(String(format: "Stripes at %.0f%% — print contrast %.2f, far under the "
                      + "0.70 a handheld scanner needs, and that's fine: the app reads its own "
                      + "mark by sampling where it knows the stripes are and comparing against "
@@ -321,6 +323,7 @@ struct SettingsView: View {
         } else if store.data.business.verificationMarkStyle == .letters {
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "textformat").foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 Text("The code is cut into the letterforms and nothing extends past them. "
                      + "This is a brand mark, not a scannable symbol — Code 128 needs every "
                      + "column, and the gaps between letters delete some. Verification is "
@@ -346,6 +349,7 @@ struct SettingsView: View {
         return HStack(alignment: .top, spacing: 6) {
             Image(systemName: scannable ? "barcode.viewfinder" : "eye")
                 .foregroundStyle(scannable ? .green : .secondary)
+                .accessibilityHidden(true)
             Text(scannable
                  ? "Print contrast \(String(format: "%.2f", contrast)) — above the "
                    + "\(String(format: "%.2f", Verification.minimumContrast)) floor, so a scanner "
@@ -375,6 +379,7 @@ struct SettingsView: View {
                     Image(systemName: store.vaultStatus.isTrouble
                           ? "exclamationmark.triangle.fill" : "lock.shield.fill")
                         .foregroundStyle(store.vaultStatus.isTrouble ? .orange : .green)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(store.secretsLoaded
                              ? store.vaultStatus.message
@@ -388,6 +393,7 @@ struct SettingsView: View {
                 if store.secretsUnprotected {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Payment details could not be encrypted and are stored in plain text in data.json.")
                             Text("This happens when the Keychain key isn't reachable — usually after the app was rebuilt or re-signed. Repairing makes a new key; anything already in the vault becomes unreadable and has to be re-entered.")
@@ -465,6 +471,7 @@ struct SettingsView: View {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: store.publishingIsConfigured ? "link.circle.fill" : "link.slash")
                         .foregroundStyle(store.publishingIsConfigured ? .green : .secondary)
+                        .accessibilityHidden(true)
                     Text(store.publishingIsConfigured
                          ? "Ready. \"Share\" on an invoice publishes it and copies the link. "
                            + "Only the PDF and a short summary — number, dates, total, status — leave "

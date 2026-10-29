@@ -104,6 +104,7 @@ struct VerifyInvoiceView: View {
     private func panel(icon: String, tint: Color, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon).foregroundStyle(tint).font(.title2)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.headline)
                 if !detail.isEmpty {

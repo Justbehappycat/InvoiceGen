@@ -327,6 +327,7 @@ struct PaymentBadge: View {
                     .overlay(glyph)
             }
         }
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder

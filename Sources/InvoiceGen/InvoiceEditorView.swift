@@ -76,6 +76,7 @@ struct InvoiceEditorView: View {
                             action: String, perform: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon).foregroundStyle(tint)
+                .accessibilityHidden(true)
             Text(text).font(.callout)
             Spacer()
             Button(action, action: perform).controlSize(.small)
@@ -500,10 +501,11 @@ struct InvoiceEditorView: View {
         HStack(spacing: 3) {
             if !printed {
                 Image(systemName: "eye.slash")
+                    .accessibilityLabel("Not printed")
             }
             Text(title)
         }
-        .foregroundStyle(printed ? .secondary : Color.secondary.opacity(0.5))
+        .foregroundStyle(.secondary)
         .help(printed ? "" : "Filled in here, left off the printed invoice")
     }
 

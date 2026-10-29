@@ -101,6 +101,7 @@ struct InvoiceRow: View {
                         Image(systemName: "archivebox")
                             .imageScale(.small)
                             .help("Archived")
+                            .accessibilityLabel("Archived")
                     }
                 }
                 .font(.caption)
@@ -152,6 +153,7 @@ struct EmptyStateView: View {
             Image(systemName: systemImage)
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text(title).font(.title3.weight(.semibold))
             Text(message)
                 .font(.callout)

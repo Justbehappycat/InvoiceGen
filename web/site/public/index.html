@@ -11,15 +11,18 @@
 <meta property="og:image" content="assets/icon.png">
 <style>
 :root{
-  --ink:#16181c; --muted:#5d636e; --faint:#8b919c;
+  --ink:#16181c; --muted:#5d636e; --faint:#6b7280;
   --line:#e3e5e9; --bg:#ffffff; --panel:#f6f7f9;
   --accent:#2f6df6; --accent-ink:#ffffff;
   --radius:14px;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
 }
 @media (prefers-color-scheme:dark){
-  :root{ --ink:#e9ecf1; --muted:#a3abb8; --faint:#79818f;
-         --line:#272b33; --bg:#0f1115; --panel:#161920; --accent:#5b8dff; }
+  :root{ --ink:#e9ecf1; --muted:#a3abb8; --faint:#7e8694;
+         --line:#272b33; --bg:#0f1115; --panel:#161920; --accent:#5b8dff;
+         /* The dark accent is light enough to be a readable link on the dark
+            background, so the button takes dark text: white on it is only 3.13:1. */
+         --accent-ink:#0f1115; }
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}

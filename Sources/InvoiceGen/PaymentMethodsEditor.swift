@@ -96,6 +96,7 @@ private struct PaymentMethodRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Use your own logo image for this method")
+                .accessibilityLabel("Choose a logo image for \(method.displayTitle)")
 
                 Picker("", selection: Binding(
                     get: { method.kind },
@@ -159,6 +160,8 @@ private struct PaymentMethodRow: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .help("More options")
+                .accessibilityLabel("More options for \(method.displayTitle)")
             }
 
             ForEach($method.fields) { $field in
@@ -184,6 +187,7 @@ private struct PaymentMethodRow: View {
                     .buttonStyle(.borderless)
                     .disabled(field.isRequired)
                     .opacity(field.isRequired ? 0.25 : 1)
+                    .accessibilityLabel("Remove field")
                     .help(field.isRequired ? "This field is part of the method and can't be removed" : "Remove field")
                 }
                 .padding(.leading, 30)
