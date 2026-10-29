@@ -134,18 +134,13 @@ struct InvoiceEditorView: View {
             .fixedSize()
             .help("Duplicate this invoice, save it as a template, or apply one")
 
-            Button {
-                showPreview.toggle()
-            } label: {
-                Label(
-                    "Preview",
-                    systemImage: showPreview
-                        ? "rectangle.righthalf.inset.filled"
-                        : "rectangle.righthalf.inset"
-                )
+            // A toggle, not a button: it reads as pressed while the preview is
+            // showing, so its state is visible without looking at the pane.
+            Toggle(isOn: $showPreview) {
+                Label("Preview", systemImage: "sidebar.right")
             }
+            .toggleStyle(.button)
             .keyboardShortcut("p", modifiers: [.command, .shift])
-            .labelStyle(.iconOnly)
             .help(showPreview ? "Hide the live preview (⇧⌘P)" : "Show the live preview (⇧⌘P)")
 
             shareMenu
@@ -325,6 +320,8 @@ struct InvoiceEditorView: View {
             SectionHeader("Customer")
 
             FormRow(label: "Bill to") {
+                // fixedSize: a menu picker given a wider frame centres itself in
+                // it, which is what pushed the selector away from its label.
                 Picker("", selection: Binding(
                     get: { invoice.customerID },
                     set: { invoice.customerID = $0 }
@@ -335,7 +332,7 @@ struct InvoiceEditorView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: 260)
+                .fixedSize()
 
                 Button {
                     let new = store.newCustomer(name: "New customer")
@@ -350,19 +347,19 @@ struct InvoiceEditorView: View {
                 .help("Create a new customer and edit their details")
             }
 
-            // The address sits under the picker in the same column the fields
-            // start in, so it reads as the customer's detail rather than a
-            // floating caption.
-            if let customer {
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(Array(customer.addressLines.enumerated()), id: \.offset) { _, line in
-                        Text(line)
+            // Two lines at most, starting in the same column as the selector:
+            // who, then where. Four stacked caption lines made the customer
+            // the tallest thing in the editor.
+            if let customer, !contactLines(for: customer).isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(contactLines(for: customer), id: \.self) { line in
+                        Text(line).lineLimit(1).truncationMode(.tail)
                     }
-                    if !customer.email.isEmpty { Text(customer.email) }
                 }
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.leading, Metrics.labelWidth + 10)
+                .textSelection(.enabled)
             }
 
             // Only worth showing once there is a job to file this under.
@@ -375,7 +372,7 @@ struct InvoiceEditorView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 260)
+                    .fixedSize()
 
                     if let id = invoice.projectID, store.project(id: id) != nil {
                         Button {
@@ -393,46 +390,80 @@ struct InvoiceEditorView: View {
         }
     }
 
+    /// "Dana Whitfield · accounts@example.com" then the address on one line.
+    private func contactLines(for customer: Customer) -> [String] {
+        let who = [customer.contactName, customer.email]
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        let address = customer.addressLines
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        return [who, address].filter { !$0.isEmpty }
+    }
+
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: Metrics.rowGap) {
             SectionHeader("Details")
 
-            // Two label/field pairs per row while there is room, falling to one
-            // when the pane is narrow -- a date field that has been squeezed
-            // until its stepper is clipped is worse than a taller form.
+            // Pairs side by side: number with P.O., issue date with due date,
+            // title with currency. The term buttons sit directly under the due
+            // date they set, and "Today" under the date it sets, so neither
+            // needs a row and a label of its own. Below ~500pt the pairs stack.
             ViewThatFits(in: .horizontal) {
                 Grid(alignment: .leadingFirstTextBaseline,
                      horizontalSpacing: 10, verticalSpacing: Metrics.rowGap) {
                     GridRow {
                         detailLabel("Invoice number"); invoiceNumberField
-                        detailLabel("P.O./S.O.");      poField
+                        pairLabel("P.O./S.O.");        poField
                     }
                     GridRow {
-                        detailLabel("Invoice date");   issueDateField
-                        detailLabel("Payment due");    dueDateField
+                        detailLabel("Invoice date");   issueDatePicker
+                        pairLabel("Payment due");      dueDateField
                     }
+                    GridRow {
+                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        todayButton
+                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        termsButtons
+                    }
+                    .padding(.top, -4)
                     GridRow {
                         detailLabel("Title");          titleField
-                        detailLabel("Currency");       currencyField
-                    }
-                    GridRow {
-                        detailLabel("Terms")
-                        termsButtons.gridCellColumns(3)
+                        pairLabel("Currency");         currencyField
                     }
                 }
+                .fixedSize()
 
                 Grid(alignment: .leadingFirstTextBaseline,
                      horizontalSpacing: 10, verticalSpacing: Metrics.rowGap) {
                     GridRow { detailLabel("Invoice number"); invoiceNumberField }
                     GridRow { detailLabel("P.O./S.O.");      poField }
-                    GridRow { detailLabel("Invoice date");   issueDateField }
+                    GridRow {
+                        detailLabel("Invoice date")
+                        HStack(spacing: 6) { issueDatePicker; todayButton }
+                    }
                     GridRow { detailLabel("Payment due");    dueDateField }
+                    GridRow {
+                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        termsButtons
+                    }
+                    .padding(.top, -4)
                     GridRow { detailLabel("Title");          titleField }
                     GridRow { detailLabel("Currency");       currencyField }
-                    GridRow { detailLabel("Terms");          termsButtons }
                 }
             }
         }
+    }
+
+    /// The second label in a pair: sized to its text, with a little extra
+    /// lead so the two pairs read as two pairs rather than one long row.
+    private func pairLabel(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .padding(.leading, 8)
+            .gridColumnAlignment(.leading)
     }
 
     private func detailLabel(_ text: String) -> some View {
@@ -452,23 +483,26 @@ struct InvoiceEditorView: View {
         TextField("", text: $invoice.poNumber).frame(width: Metrics.fieldWidth)
     }
 
-    private var issueDateField: some View {
-        HStack(spacing: 6) {
-            DatePicker("", selection: $invoice.issueDate, displayedComponents: .date)
-                .labelsHidden()
-            // fixedSize stops the grid squeezing this to "Tod...".
-            Button("Today") { setIssueDateToToday() }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .fixedSize()
-                .disabled(Calendar.current.isDateInToday(invoice.issueDate))
-                .help("Set the invoice date to today, keeping the same payment term")
-        }
+    private var issueDatePicker: some View {
+        DatePicker("", selection: $invoice.issueDate, displayedComponents: .date)
+            .labelsHidden()
+            .fixedSize()
+    }
+
+    private var todayButton: some View {
+        // fixedSize stops the grid squeezing this to "Tod...".
+        Button("Today") { setIssueDateToToday() }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fixedSize()
+            .disabled(Calendar.current.isDateInToday(invoice.issueDate))
+            .help("Set the invoice date to today, keeping the same payment term")
     }
 
     private var dueDateField: some View {
         DatePicker("", selection: $invoice.dueDate, displayedComponents: .date)
             .labelsHidden()
+            .fixedSize()
     }
 
     private var titleField: some View {
@@ -480,23 +514,46 @@ struct InvoiceEditorView: View {
             ForEach(Fmt.currencyCodes, id: \.self) { Text($0).tag($0) }
         }
         .labelsHidden()
-        .frame(width: Metrics.fieldWidth)
+        .fixedSize()
     }
 
+    /// The quick terms as one segmented control rather than four buttons: it
+    /// is narrower, which is what lets Details stay two columns in a laptop
+    /// pane, and it shows which term the dates currently describe -- "30d"
+    /// stays lit on a Net 30 invoice -- so the link to the due date is visible
+    /// rather than implied. A custom due date lights nothing.
     private var termsButtons: some View {
-        HStack(spacing: 6) {
+        Picker("Payment term", selection: termBinding) {
             ForEach([7, 14, 30, 60], id: \.self) { days in
-                Button("\(days)d") {
-                    invoice.dueDate = Calendar.current.date(
-                        byAdding: .day, value: days, to: invoice.issueDate
-                    ) ?? invoice.dueDate
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Due \(days) days after the invoice date")
+                Text("\(days)d").tag(Int?.some(days))
             }
-            Spacer(minLength: 0)
         }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .fixedSize()
+        .help("Set the due date this many days after the invoice date")
+    }
+
+    private var termBinding: Binding<Int?> {
+        Binding(
+            get: {
+                let calendar = Calendar.current
+                let days = calendar.dateComponents(
+                    [.day],
+                    from: calendar.startOfDay(for: invoice.issueDate),
+                    to: calendar.startOfDay(for: invoice.dueDate)
+                ).day
+                return [7, 14, 30, 60].contains(days ?? -1) ? days : nil
+            },
+            set: { days in
+                // Exactly what the buttons did: issue date plus the term.
+                guard let days else { return }
+                invoice.dueDate = Calendar.current.date(
+                    byAdding: .day, value: days, to: invoice.issueDate
+                ) ?? invoice.dueDate
+            }
+        )
     }
 
     private var itemsSection: some View {
@@ -532,12 +589,12 @@ struct InvoiceEditorView: View {
                     columnHeader(invoice.columns.itemHeading, printed: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     columnHeader(invoice.columns.unitHeading, printed: invoice.columns.showUnit)
-                        .frame(width: 60, alignment: .trailing)
+                        .frame(width: Metrics.quantityColumn, alignment: .trailing)
                     columnHeader(invoice.columns.priceHeading, printed: invoice.columns.showPrice)
-                        .frame(width: 90, alignment: .trailing)
+                        .frame(width: Metrics.priceColumn, alignment: .trailing)
                     columnHeader(invoice.columns.amountHeading, printed: invoice.columns.showAmount)
-                        .frame(width: 90, alignment: .trailing)
-                    Spacer().frame(width: 54)
+                        .frame(width: Metrics.amountColumn, alignment: .trailing)
+                    Spacer().frame(width: Metrics.actionColumn)
                 }
                 .font(.caption)
 
@@ -807,50 +864,39 @@ struct LineItemRow: View {
     @State private var assistError: String?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
+        // Two lines. The figures share a line with the name, and the
+        // description gets the full width beneath them -- under quantity,
+        // price and amount too -- instead of being squeezed into the name's
+        // column and wrapping after four words. Taxable rides at the end of
+        // that line rather than taking a third.
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
                 TextField("Item name", text: $item.title)
+                    .frame(maxWidth: .infinity)
+                DecimalField(placeholder: "1", value: $item.quantity, alignment: .trailing)
+                    .frame(width: Metrics.quantityColumn - 4)
+                    .padding(.leading, 4)
+                DecimalField(placeholder: "0", value: $item.price, alignment: .trailing)
+                    .frame(width: Metrics.priceColumn - 4)
+                    .padding(.leading, 4)
+                Money(amount: item.amount, code: currencyCode)
+                    .frame(width: Metrics.amountColumn, alignment: .trailing)
+                actions
+                    .frame(width: Metrics.actionColumn)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TextField("Description (optional)", text: $item.details, axis: .vertical)
-                    .lineLimit(1...4)
-                    .font(.caption)
+                    .lineLimit(1...6)
+                    .font(.callout)
                 Toggle("Taxable", isOn: $item.taxable)
                     .toggleStyle(.checkbox)
                     .font(.caption)
-                    .padding(.top, 1)
+                    .fixedSize()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            DecimalField(placeholder: "1", value: $item.quantity, alignment: .trailing)
-                .frame(width: 56)
-                .padding(.leading, 4)
-            DecimalField(placeholder: "0", value: $item.price, alignment: .trailing)
-                .frame(width: 86)
-                .padding(.leading, 4)
-            Text(Fmt.currency(item.amount, code: currencyCode))
-                .frame(width: 90, alignment: .trailing)
-                .padding(.top, 3)
-
-            Menu {
-                if assistEnabled, OnDeviceAssist.isReady {
-                    Button("Tidy up wording", action: tidy)
-                        .disabled(isTidying || item.title.isEmpty)
-                }
-                Button("Save to items library", action: onSaveToCatalog)
-                Button("Remove line", role: .destructive, action: onDelete)
-                    .disabled(!canDelete)
-            } label: {
-                if isTidying {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label("Line actions", systemImage: "ellipsis.circle")
-                }
-            }
-            .labelStyle(.iconOnly)
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 50)
+            .padding(.trailing, Metrics.actionColumn)
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 6)
         .sheet(item: $proposal) { proposal in
             TidyReview(item: item, proposal: proposal) { accepted in
                 if accepted {
@@ -867,6 +913,27 @@ struct LineItemRow: View {
         } message: {
             Text(assistError ?? "")
         }
+    }
+
+    private var actions: some View {
+        Menu {
+            if assistEnabled, OnDeviceAssist.isReady {
+                Button("Tidy up wording", action: tidy)
+                    .disabled(isTidying || item.title.isEmpty)
+            }
+            Button("Save to items library", action: onSaveToCatalog)
+            Button("Remove line", role: .destructive, action: onDelete)
+                .disabled(!canDelete)
+        } label: {
+            if isTidying {
+                ProgressView().controlSize(.small)
+            } else {
+                Label("Line actions", systemImage: "ellipsis.circle")
+            }
+        }
+        .labelStyle(.iconOnly)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
     }
 
     /// The model only ever proposes. Applying is the sheet's job, and undo

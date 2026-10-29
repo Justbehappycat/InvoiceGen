@@ -19,8 +19,17 @@ enum Metrics {
     /// Every label in the editor is this wide, so the fields beside them form
     /// one column from Customer all the way down to Totals.
     static let labelWidth: CGFloat = 96
-    /// The ordinary single-value field.
-    static let fieldWidth: CGFloat = 128
+    /// The ordinary single-value field. 104, not 128: two of these plus a date
+    /// have to sit side by side in a 520pt pane, or Details falls back to one
+    /// tall column at ordinary laptop widths.
+    static let fieldWidth: CGFloat = 104
+
+    // Line-item columns, shared by the header and every row so they cannot
+    // drift apart.
+    static let quantityColumn: CGFloat = 60
+    static let priceColumn: CGFloat = 92
+    static let amountColumn: CGFloat = 92
+    static let actionColumn: CGFloat = 40
     /// Where money lines up on the right.
     static let amountWidth: CGFloat = 104
 
