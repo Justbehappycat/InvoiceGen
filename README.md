@@ -315,6 +315,27 @@ unconfigured or plain-http address refuses to publish at all.
   needed) and, where a model exists, makes one real call and checks the
   contract rather than the prose.
 
+## Checking the interface without the vault
+
+A copy of the app that isn't signed with the Developer ID -- an ad-hoc test
+build, say -- isn't on the vault key's Keychain access list, so every launch
+asks for a password. For looking at the interface, run it in UI-check mode:
+
+```bash
+INVOICEGEN_UI_CHECK=1 INVOICEGEN_DATA=/path/to/fixture.json build/InvoiceGen.app/Contents/MacOS/InvoiceGen --appearance dark
+```
+
+The vault and the Keychain are never touched, so nothing prompts. It refuses
+to switch on without an explicit fixture file, and refuses outright if that
+file is the real data file. It never saves, so nothing can be written in the
+clear, and the Dock icon says "UI". `--appearance light|dark` sets the theme
+for that copy alone. `--selftest-uicheck` checks every refusal and, run in
+the mode, that the Keychain returns nothing and a save writes nothing.
+
+Look at the live window rather than `--render-ui` for the toolbar and the
+sidebar selection: an offscreen render can't draw the glass materials or the
+selection, and shows them as faint or black when they are fine.
+
 ## Publishing an invoice as a link
 
 > Off, and nothing is deployed. The Worker that served `invoice.finecut.com`

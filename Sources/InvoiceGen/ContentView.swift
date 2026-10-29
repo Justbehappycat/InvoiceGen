@@ -33,6 +33,9 @@ struct ContentView: View {
         }
         .task {
             if store.vaultStatus.isTrouble { showVaultAlert = true }
+            // Marks a UI-check copy on the Dock, where it can't be mistaken
+            // for the real app and costs the layout nothing.
+            if AppStore.isUICheck { NSApp.dockTile.badgeLabel = "UI" }
         }
         .onChange(of: focus.requestedSection) { newValue in
             if let newValue {

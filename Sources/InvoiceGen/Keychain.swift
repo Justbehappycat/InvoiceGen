@@ -32,6 +32,8 @@ enum Keychain {
     }
 
     static func read(_ item: Item) -> Data? {
+        // UI check: the Keychain is never touched, so nothing prompts.
+        guard !AppStore.isUICheck else { return nil }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -46,6 +48,8 @@ enum Keychain {
 
     @discardableResult
     static func write(_ item: Item, _ value: Data) -> Bool {
+        // UI check: the Keychain is never touched, so nothing prompts.
+        guard !AppStore.isUICheck else { return false }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -75,6 +79,8 @@ enum Keychain {
     }
 
     static func delete(_ item: Item) {
+        // UI check: the Keychain is never touched, so nothing prompts.
+        guard !AppStore.isUICheck else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -104,11 +110,15 @@ enum Keychain {
     }
 
     private static func readFallback(_ item: Item) -> Data? {
-        try? Data(contentsOf: fallbackURL(item))
+        // UI check: the Keychain is never touched, so nothing prompts.
+        guard !AppStore.isUICheck else { return nil }
+        return try? Data(contentsOf: fallbackURL(item))
     }
 
     @discardableResult
     private static func writeFallback(_ item: Item, _ value: Data) -> Bool {
+        // UI check: the Keychain is never touched, so nothing prompts.
+        guard !AppStore.isUICheck else { return false }
         let url = fallbackURL(item)
         guard (try? value.write(to: url, options: .atomic)) != nil else { return false }
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)

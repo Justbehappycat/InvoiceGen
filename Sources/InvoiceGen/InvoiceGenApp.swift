@@ -37,6 +37,14 @@ struct InvoiceGenApp: App {
     init() {
         // Headless render used for checking PDF output: InvoiceGen --render-sample out.pdf
         let args = CommandLine.arguments
+        // For checking the live app in both themes without flipping the whole
+        // Mac's appearance: InvoiceGen --appearance dark|light. Offscreen
+        // renders can't stand in for this -- the sidebar selection and the bar
+        // materials only draw correctly in a real window.
+        if let index = args.firstIndex(of: "--appearance"), index + 1 < args.count {
+            _ = NSApplication.shared
+            NSApp.appearance = NSAppearance(named: args[index + 1] == "dark" ? .darkAqua : .aqua)
+        }
         if let index = args.firstIndex(of: "--render-ui"), index + 1 < args.count {
             _ = NSApplication.shared
             NSApp.setActivationPolicy(.accessory)
@@ -1557,6 +1565,56 @@ struct InvoiceGenApp: App {
             try? FileManager.default.removeItem(at: dir)
 
             print(failures == 0 ? "all contract checks passed" : "\(failures) FAILED")
+            exit(failures == 0 ? 0 : 1)
+        }
+        if args.contains("--selftest-uicheck") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            var failures = 0
+            func check(_ label: String, _ ok: Bool) {
+                print("  \(ok ? "ok  " : "FAIL") \(label)"); if !ok { failures += 1 }
+            }
+            let real = URL(fileURLWithPath: "/Users/someone/Library/Application Support/InvoiceGen/data.json")
+            print("when UI-check mode may switch the vault off:")
+            check("not without the flag",
+                  !AppStore.uiCheckAllowed(environment: ["INVOICEGEN_DATA": "/tmp/f.json"], realData: real))
+            check("not with the flag but no fixture",
+                  !AppStore.uiCheckAllowed(environment: ["INVOICEGEN_UI_CHECK": "1"], realData: real))
+            check("not with any value but 1",
+                  !AppStore.uiCheckAllowed(environment: ["INVOICEGEN_UI_CHECK": "yes",
+                                                         "INVOICEGEN_DATA": "/tmp/f.json"], realData: real))
+            check("never on the real data file",
+                  !AppStore.uiCheckAllowed(environment: ["INVOICEGEN_UI_CHECK": "1",
+                                                         "INVOICEGEN_DATA": real.path], realData: real))
+            check("not on the real file reached through a dot-dot path",
+                  !AppStore.uiCheckAllowed(environment: ["INVOICEGEN_UI_CHECK": "1",
+                      "INVOICEGEN_DATA": "/Users/someone/Library/Application Support/InvoiceGen/../InvoiceGen/data.json"],
+                      realData: real))
+            check("yes on a fixture with the flag",
+                  AppStore.uiCheckAllowed(environment: ["INVOICEGEN_UI_CHECK": "1",
+                                                        "INVOICEGEN_DATA": "/tmp/fixture.json"], realData: real))
+
+            if AppStore.isUICheck {
+                print("this process is a UI check, so the guards must hold:")
+                _ = NSApplication.shared
+                MainActor.assumeIsolated {
+                    let store = AppStore.shared
+                    check("vault never opened", store.vaultStatus == .notOpened)
+                    check("not reported as trouble", !store.vaultStatus.isTrouble)
+                    check("Keychain returns nothing for the vault key", Keychain.vaultKey() == nil)
+                    check("Keychain returns nothing for the publish token", Keychain.publishToken() == nil)
+                    let before = (try? FileManager.default.attributesOfItem(
+                        atPath: store.storageURL.path)[.modificationDate]) as? Date
+                    store.data.business.name += " (edited)"
+                    store.saveNow()
+                    let after = (try? FileManager.default.attributesOfItem(
+                        atPath: store.storageURL.path)[.modificationDate]) as? Date
+                    check("saving writes nothing", before == after)
+                }
+            } else {
+                print("  (not a UI-check process: the live guards are exercised with "
+                      + "INVOICEGEN_UI_CHECK=1 and a fixture)")
+            }
+            print(failures == 0 ? "all ui-check checks passed" : "\(failures) FAILED")
             exit(failures == 0 ? 0 : 1)
         }
         if args.contains("--selftest-columns") {

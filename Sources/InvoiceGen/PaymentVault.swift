@@ -57,10 +57,12 @@ enum VaultStatus: Equatable {
     case tampered(String)
     /// The Keychain key is unavailable (denied, or a different login).
     case keyUnavailable
+    /// Deliberately never opened: a UI-check copy runs with the vault off.
+    case notOpened
 
     var isTrouble: Bool {
         switch self {
-        case .verified, .empty: return false
+        case .verified, .empty, .notOpened: return false
         case .tampered, .keyUnavailable: return true
         }
     }
@@ -72,6 +74,8 @@ enum VaultStatus: Equatable {
         case .tampered(let detail): return detail
         case .keyUnavailable:
             return "The encryption key in your Keychain isn't available, so payment details can't be read."
+        case .notOpened:
+            return "UI check: the vault and Keychain are switched off, and nothing is saved."
         }
     }
 }

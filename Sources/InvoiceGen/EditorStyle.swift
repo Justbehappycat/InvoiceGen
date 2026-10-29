@@ -23,6 +23,9 @@ enum Metrics {
     /// have to sit side by side in a 520pt pane, or Details falls back to one
     /// tall column at ordinary laptop widths.
     static let fieldWidth: CGFloat = 104
+    /// How far a short field may grow when the pane has room. Past this an
+    /// invoice number box is just a long empty bar.
+    static let fieldMaxWidth: CGFloat = 220
 
     // Line-item columns, shared by the header and every row so they cannot
     // drift apart.

@@ -27,8 +27,6 @@ struct InvoiceEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             stateBanner
-            actionBar
-            Divider()
             HSplitView {
                 // Both panes state a real minimum and keep their own scroll
                 // view, so dragging the divider runs out of room instead of
@@ -44,6 +42,14 @@ struct InvoiceEditorView: View {
         }
         .navigationTitle("Invoice #\(invoice.number)")
         .navigationSubtitle(customer?.displayName ?? "No customer")
+        .toolbar { invoiceToolbar }
+        .alert("Couldn't publish", isPresented: Binding(
+            get: { publishError != nil }, set: { if !$0 { publishError = nil } }
+        )) {
+            Button("OK", role: .cancel) { publishError = nil }
+        } message: {
+            Text(publishError ?? "")
+        }
         .onAppear { focus.invoiceID = invoice.id }
         .alert("Save as template", isPresented: $isNamingTemplate) {
             TextField("Template name", text: $templateName)
@@ -97,74 +103,101 @@ struct InvoiceEditorView: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
-    private var actionBar: some View {
-        HStack(spacing: 10) {
-            Picker("", selection: $invoice.status) {
-                ForEach(InvoiceStatus.allCases) { status in
-                    Text(status.label).tag(status)
-                }
-            }
-            .labelsHidden()
-            .fixedSize()
-
-            if invoice.isOverdue {
-                StatusChip(status: invoice.status, overdue: true)
-            }
-
-            Spacer()
-
-            Menu {
-                Button("Duplicate invoice") {
-                    let copy = store.duplicate(invoice)
-                    focus.invoiceID = copy.id
-                }
-                Button("Save as template…") { isNamingTemplate = true }
-                if !store.data.templates.isEmpty {
-                    Divider()
-                    Section("Apply template") {
-                        ForEach(store.data.templates) { template in
-                            Button(template.name) { apply(template) }
-                        }
+    /// The window toolbar, grouped the way Mail groups its own: related
+    /// actions share one glass capsule, a lone action gets a circle of its
+    /// own, and the one that finishes the job -- Export PDF -- is tinted.
+    /// The system draws every shape, so the rounding is the platform's and
+    /// matches every other Mac app, rather than five hand-made bezels that
+    /// each disagreed slightly.
+    ///
+    /// This used to be a bar inside the pane, to stop items collapsing into
+    /// an overflow menu in a narrow window. The overflow menu is what every
+    /// Mac app does there, and the in-pane bar cost a row of height and a
+    /// second, competing set of shapes.
+    @ToolbarContentBuilder
+    private var invoiceToolbar: some ToolbarContent {
+        // Beside the title: what state this invoice is in.
+        ToolbarItem(placement: .navigation) {
+            HStack(spacing: 6) {
+                Picker("Status", selection: $invoice.status) {
+                    ForEach(InvoiceStatus.allCases) { status in
+                        Text(status.label).tag(status)
                     }
                 }
-            } label: {
-                Label("Reuse", systemImage: "plus.square.on.square")
+                .labelsHidden()
+                .fixedSize()
+                .help("Draft, Sent or Paid")
+                if invoice.isOverdue {
+                    StatusChip(status: invoice.status, overdue: true)
+                }
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Duplicate this invoice, save it as a template, or apply one")
+        }
 
-            // A toggle, not a button: it reads as pressed while the preview is
-            // showing, so its state is visible without looking at the pane.
+        ToolbarItem(placement: .primaryAction) { reuseMenu }
+
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            // A toggle, not a button: it reads as pressed while the preview
+            // is showing, so its state is visible without looking at the pane.
             Toggle(isOn: $showPreview) {
                 Label("Preview", systemImage: "sidebar.right")
             }
-            .toggleStyle(.button)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help(showPreview ? "Hide the live preview (⇧⌘P)" : "Show the live preview (⇧⌘P)")
+        }
 
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
+
+        // Sending it somewhere: one capsule, like Mail's reply group.
+        ToolbarItemGroup(placement: .primaryAction) {
             shareMenu
-
             Button {
                 PDFExporter.printInvoice(invoice: invoice, customer: customer, business: business)
             } label: {
                 Label("Print", systemImage: "printer")
             }
-            .labelStyle(.iconOnly)
             .help("Print this invoice (⌘P)")
+        }
 
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
+
+        ToolbarItem(placement: .primaryAction) {
             Button {
                 PDFExporter.exportWithPanel(invoice: invoice, customer: customer, business: business)
             } label: {
                 Label("Export PDF", systemImage: "square.and.arrow.down")
             }
             .buttonStyle(.borderedProminent)
+            .help("Export this invoice as a PDF (⌘E)")
         }
-        .labelStyle(.titleAndIcon)
-        .controlSize(.regular)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .liquidGlassBar()
+    }
+
+    private var reuseMenu: some View {
+        Menu {
+            Button("Duplicate invoice") {
+                let copy = store.duplicate(invoice)
+                focus.invoiceID = copy.id
+            }
+            Button("Save as template…") { isNamingTemplate = true }
+            if !store.data.templates.isEmpty {
+                Divider()
+                Section("Apply template") {
+                    ForEach(store.data.templates) { template in
+                        Button(template.name) { apply(template) }
+                    }
+                }
+            }
+        } label: {
+            Label("Reuse", systemImage: "plus.square.on.square")
+        }
+        .help("Duplicate this invoice, save it as a template, or apply one")
     }
 
     /// Publishing puts the invoice behind a link a client can open. Always
@@ -187,17 +220,8 @@ struct InvoiceEditorView: View {
             Label(isPublishing ? "Publishing…" : (publishedLink == nil ? "Share" : "Shared"),
                   systemImage: publishedLink == nil ? "link" : "link.circle.fill")
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
         .disabled(isPublishing)
         .help(publishedLink?.absoluteString ?? "Publish this invoice as a link for the client")
-        .alert("Couldn't publish", isPresented: Binding(
-            get: { publishError != nil }, set: { if !$0 { publishError = nil } }
-        )) {
-            Button("OK", role: .cancel) { publishError = nil }
-        } message: {
-            Text(publishError ?? "")
-        }
     }
 
     private var publishedLink: URL? {
@@ -352,8 +376,10 @@ struct InvoiceEditorView: View {
             // the tallest thing in the editor.
             if let customer, !contactLines(for: customer).isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
+                    // Wraps rather than truncates: a cut-off address is one you
+                    // can't check against the invoice.
                     ForEach(contactLines(for: customer), id: \.self) { line in
-                        Text(line).lineLimit(1).truncationMode(.tail)
+                        Text(line).fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .font(.callout)
@@ -374,7 +400,7 @@ struct InvoiceEditorView: View {
                     .labelsHidden()
                     .fixedSize()
 
-                    if let id = invoice.projectID, store.project(id: id) != nil {
+                    if let id = invoice.projectID, let project = store.project(id: id) {
                         Button {
                             focus.projectID = id
                             focus.requestedSection = .projects
@@ -383,7 +409,8 @@ struct InvoiceEditorView: View {
                         }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.borderless)
-                        .help("Open the job this invoice belongs to")
+                        .help("Open “\(project.displayName)”")
+                        .accessibilityLabel("Open project \(project.displayName)")
                     }
                 }
             }
@@ -434,7 +461,7 @@ struct InvoiceEditorView: View {
                         pairLabel("Currency");         currencyField
                     }
                 }
-                .fixedSize()
+                .fixedSize(horizontal: false, vertical: true)
 
                 Grid(alignment: .leadingFirstTextBaseline,
                      horizontalSpacing: 10, verticalSpacing: Metrics.rowGap) {
@@ -476,11 +503,11 @@ struct InvoiceEditorView: View {
     private var invoiceNumberField: some View {
         TextField("", text: $invoice.number)
             .monospacedDigit()
-            .frame(width: Metrics.fieldWidth)
+            .frame(minWidth: Metrics.fieldWidth, maxWidth: Metrics.fieldMaxWidth)
     }
 
     private var poField: some View {
-        TextField("", text: $invoice.poNumber).frame(width: Metrics.fieldWidth)
+        TextField("", text: $invoice.poNumber).frame(minWidth: Metrics.fieldWidth, maxWidth: Metrics.fieldMaxWidth)
     }
 
     private var issueDatePicker: some View {
@@ -506,7 +533,7 @@ struct InvoiceEditorView: View {
     }
 
     private var titleField: some View {
-        TextField("INVOICE", text: $invoice.title).frame(width: Metrics.fieldWidth)
+        TextField("INVOICE", text: $invoice.title).frame(minWidth: Metrics.fieldWidth, maxWidth: Metrics.fieldMaxWidth)
     }
 
     private var currencyField: some View {
@@ -523,16 +550,48 @@ struct InvoiceEditorView: View {
     /// stays lit on a Net 30 invoice -- so the link to the due date is visible
     /// rather than implied. A custom due date lights nothing.
     private var termsButtons: some View {
-        Picker("Payment term", selection: termBinding) {
-            ForEach([7, 14, 30, 60], id: \.self) { days in
-                Text("\(days)d").tag(Int?.some(days))
+        VStack(alignment: .leading, spacing: 3) {
+            Picker("Payment term", selection: termBinding) {
+                ForEach([7, 14, 30, 60], id: \.self) { days in
+                    Text("\(days)d").tag(Int?.some(days))
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .help("Set the due date this many days after the invoice date")
+            .accessibilityValue(termDescription)
+
+            // Nothing lit used to be the only sign of a custom date, which is
+            // easy to read as "not set". Say it, with the number of days; and
+            // a due date before the invoice date is almost always a slip, so
+            // it says that instead, in orange.
+            if termBinding.wrappedValue == nil {
+                Text(termDescription)
+                    .font(.caption)
+                    .foregroundStyle(termDays.map { $0 < 0 } == true ? .orange : .secondary)
+                    .fixedSize()
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.small)
-        .fixedSize()
-        .help("Set the due date this many days after the invoice date")
+    }
+
+    /// Whole days from the invoice date to the due date.
+    private var termDays: Int? {
+        let calendar = Calendar.current
+        return calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: invoice.issueDate),
+            to: calendar.startOfDay(for: invoice.dueDate)
+        ).day
+    }
+
+    private var termDescription: String {
+        guard let days = termDays else { return "Custom due date" }
+        if days < 0 { return "Due before the invoice date" }
+        if days == 0 { return "Custom · due on receipt" }
+        if [7, 14, 30, 60].contains(days) { return "Net \(days)" }
+        return "Custom · \(days) days"
     }
 
     private var termBinding: Binding<Int?> {

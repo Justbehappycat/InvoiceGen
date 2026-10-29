@@ -56,7 +56,12 @@ final class AppStore: ObservableObject {
             self.isSeeded = true
             self.needsSaveAfterSecrets = true
         }
-        openVault()
+        if AppStore.isUICheck {
+            vaultStatus = .notOpened
+            secretsLoaded = true
+        } else {
+            openVault()
+        }
     }
 
     /// Opens the vault away from the main thread, then folds what it holds into
@@ -145,11 +150,42 @@ final class AppStore: ObservableObject {
         if let override = ProcessInfo.processInfo.environment["INVOICEGEN_DATA"], !override.isEmpty {
             return URL(fileURLWithPath: override)
         }
+        return realDataURL()
+    }
+
+    /// Where the user's own data lives, whatever INVOICEGEN_DATA says.
+    static func realDataURL() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
         let dir = base.appendingPathComponent("InvoiceGen", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("data.json")
+    }
+
+    /// UI-check mode: the app runs on a fixture with the vault and the Keychain
+    /// switched off entirely, so checking the interface never asks for a
+    /// password -- an ad-hoc-signed test copy is not on the vault key's access
+    /// list, and every launch would otherwise prompt.
+    ///
+    /// Three guards keep this from weakening anything real:
+    /// - it needs INVOICEGEN_UI_CHECK=1 *and* an explicit INVOICEGEN_DATA file,
+    ///   and is refused outright if that file is the real data file;
+    /// - it never saves, so nothing -- payment details least of all -- can be
+    ///   written in the clear;
+    /// - it shows "UI" on the Dock icon, so the copy can't be mistaken.
+    static let isUICheck: Bool = uiCheckAllowed(
+        environment: ProcessInfo.processInfo.environment,
+        realData: realDataURL()
+    )
+
+    /// The decision on its own, so the refusals can be tested without ever
+    /// pointing a running copy at the real data file.
+    static func uiCheckAllowed(environment env: [String: String], realData: URL) -> Bool {
+        guard env["INVOICEGEN_UI_CHECK"] == "1",
+              let data = env["INVOICEGEN_DATA"], !data.isEmpty else { return false }
+        let fixture = URL(fileURLWithPath: data).resolvingSymlinksInPath().standardizedFileURL
+        let real = realData.resolvingSymlinksInPath().standardizedFileURL
+        return fixture.path != real.path
     }
 
     var storageURL: URL { fileURL }
@@ -290,6 +326,8 @@ final class AppStore: ObservableObject {
     }
 
     func saveNow() {
+        // A UI check is a look, not a session: nothing it does is kept.
+        guard !AppStore.isUICheck else { return }
         // Until the vault has been opened there is nothing of its own to write,
         // and touching it here would race the background open.
         guard secretsLoaded else {
