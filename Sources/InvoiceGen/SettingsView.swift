@@ -243,6 +243,11 @@ struct SettingsView: View {
 
                 markNote
 
+                LockButton(
+                    unlockReason: "set the invoice verification passphrase",
+                    lockedHint: "The passphrase is hidden until you authenticate."
+                )
+
                 if lock.isUnlocked {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                         GridRow {
@@ -274,10 +279,6 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Button("Unlock to set the passphrase") {
-                        lock.unlock(reason: "set the invoice verification passphrase")
-                    }
                 }
 
                 if let passphraseNote {

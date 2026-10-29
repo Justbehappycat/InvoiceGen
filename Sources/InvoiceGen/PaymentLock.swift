@@ -79,3 +79,45 @@ final class PaymentLock: ObservableObject {
         return String(repeating: "•", count: max(4, value.count - 4)) + value.suffix(4)
     }
 }
+
+
+/// The single control for locking and unlocking protected values.
+///
+/// Everywhere that hides something behind the lock uses this, so locking and
+/// unlocking are the same button, in the same place, at the same size. They
+/// used to be two different controls in two different corners -- a full-size
+/// "Unlock to edit" below the list when locked, and a small borderless "Lock
+/// now" above it when unlocked -- which meant the control moved out from under
+/// the pointer the moment you used it.
+struct LockButton: View {
+    @ObservedObject private var lock = PaymentLock.shared
+
+    /// Shown in the system's authentication prompt: "… wants to <reason>".
+    var unlockReason: String
+    /// What the lock is protecting here, shown while locked.
+    var lockedHint: String
+    var unlockedHint: String = "Unlocked — re-locks after 5 minutes."
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                if lock.isUnlocked { lock.lock() } else { lock.unlock(reason: unlockReason) }
+            } label: {
+                Label(lock.isUnlocked ? "Lock" : "Unlock",
+                      systemImage: lock.isUnlocked ? "lock.open.fill" : "lock.fill")
+                    // Fixed width so the button does not resize as the word
+                    // changes and slide out from under the pointer.
+                    .frame(minWidth: 72, alignment: .leading)
+            }
+            if let failure = lock.lastFailure, !lock.isUnlocked {
+                Text(failure).font(.caption).foregroundStyle(.orange)
+            } else {
+                Text(lock.isUnlocked ? unlockedHint : lockedHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}

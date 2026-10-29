@@ -12,6 +12,13 @@ struct PaymentMethodsEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // One control, one position, in both states: locking and unlocking
+            // are the same gesture in the same place, not two different
+            // buttons in two different corners.
+            LockButton(
+                unlockReason: "edit your saved payment details",
+                lockedHint: "Values are masked and read-only until you authenticate."
+            )
             if !lock.isUnlocked {
                 lockedView
             } else {
@@ -42,34 +49,11 @@ struct PaymentMethodsEditor: View {
                     .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 8) {
-                Button {
-                    lock.unlock()
-                } label: {
-                    Label("Unlock to edit", systemImage: "lock.fill")
-                }
-                if let failure = lock.lastFailure {
-                    Text(failure).font(.caption).foregroundStyle(.orange)
-                } else {
-                    Text("Values are masked and read-only until you authenticate.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
     }
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Label("Unlocked — re-locks after 5 minutes", systemImage: "lock.open.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Lock now") { lock.lock() }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-            }
-
             if methods.isEmpty {
                 Text("No payment methods yet — add one and it appears on the invoice under “How to Pay”.")
                     .font(.callout)
