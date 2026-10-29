@@ -171,6 +171,18 @@ final class AppStore: ObservableObject {
             }
             data.business.markStyleMigrated = true
         }
+
+        // The banner tone shipped at 10%, which bands visibly across a grey
+        // header while buying nothing: the app's own reader matches 100% at
+        // every tone from 30% down to 2%, so 4% verifies exactly as well and
+        // stops the stripes dominating the page. A tone already moved off the
+        // old default was chosen deliberately, so it is left alone.
+        if !data.business.barToneMigrated {
+            if data.business.verificationBarTone == 0.10 {
+                data.business.verificationBarTone = 0.04
+            }
+            data.business.barToneMigrated = true
+        }
         let legacyNotes = """
         Methods of Payment:
         1. Zelle

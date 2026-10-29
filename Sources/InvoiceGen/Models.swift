@@ -42,9 +42,16 @@ struct BusinessProfile: Codable, Hashable {
     /// How much darker than the banner the bars print, 0…1. The app reads its
     /// own mark by local contrast, so this can go as low as taste allows —
     /// it does not have to clear the scanner standards' 0.70.
-    var verificationBarTone: Double = 0.10
+    /// How dark the verification stripes print, as a fraction of the banner.
+    /// Four percent, not ten: the app reads its own mark at 100% all the way
+    /// down to 2%, so a tone that bands visibly across the header buys no
+    /// verification strength. The slider still goes to 40% for anyone who
+    /// wants a scanner to manage it.
+    var verificationBarTone: Double = 0.04
     /// Whether the one-time correction below has already run for this file.
     var markStyleMigrated: Bool = true
+    /// False only in a file written before the tone default changed.
+    var barToneMigrated: Bool = true
     /// Where published invoices are served from, e.g. https://invoice.finecut.com
     /// The token that goes with it lives in the Keychain, never in data.json.
     var publishBaseURL: String = ""
@@ -56,7 +63,7 @@ struct BusinessProfile: Codable, Hashable {
         case defaultPaymentTermDays, defaultNotes, defaultFooterMessage, paymentMethods
         case defaultColumns, verificationPassphrase, verificationSalt, printVerificationCode
         case verificationStripInk, verificationMarkContained
-        case verificationMarkStyle, verificationBarTone, markStyleMigrated
+        case verificationMarkStyle, verificationBarTone, markStyleMigrated, barToneMigrated
         case publishBaseURL
     }
 
@@ -99,8 +106,9 @@ struct BusinessProfile: Codable, Hashable {
             VerificationMarkStyle.self, forKey: .verificationMarkStyle)
             ?? containedChoice.map { $0 ? .letters : .strip }
             ?? .banner
-        verificationBarTone = try c.decodeIfPresent(Double.self, forKey: .verificationBarTone) ?? 0.10
+        verificationBarTone = try c.decodeIfPresent(Double.self, forKey: .verificationBarTone) ?? 0.04
         markStyleMigrated = try c.decodeIfPresent(Bool.self, forKey: .markStyleMigrated) ?? false
+        barToneMigrated = try c.decodeIfPresent(Bool.self, forKey: .barToneMigrated) ?? false
         publishBaseURL = try c.decodeIfPresent(String.self, forKey: .publishBaseURL) ?? ""
     }
 
