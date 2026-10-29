@@ -340,6 +340,28 @@ struct InvoiceEditorView: View {
                         }
                     }
                 }
+
+                // Only worth showing once there is a job to file this under.
+                if !store.data.projects.isEmpty {
+                    HStack {
+                        Picker("Project", selection: $invoice.projectID) {
+                            Text("None").tag(UUID?.none)
+                            ForEach(store.data.projects.filter { !$0.isArchived }) { project in
+                                Text(project.displayName).tag(UUID?.some(project.id))
+                            }
+                        }
+                        if let id = invoice.projectID, store.project(id: id) != nil {
+                            Button {
+                                focus.projectID = id
+                                focus.requestedSection = .projects
+                            } label: {
+                                Label("Open project", systemImage: "arrow.up.forward.square")
+                            }
+                            .labelStyle(.iconOnly)
+                            .help("Open the job this invoice belongs to")
+                        }
+                    }
+                }
             }
             .padding(6)
         } label: {

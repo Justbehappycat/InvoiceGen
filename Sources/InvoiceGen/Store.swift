@@ -563,13 +563,201 @@ final class AppStore: ObservableObject {
     func permanentlyDelete(id: UUID) {
         commitHistory()
         data.invoices.removeAll { $0.id == id }
+        unlinkMilestones(fromInvoices: [id])
         commitHistory()
     }
 
     func emptyTrash() {
         commitHistory()
+        let gone = Set(data.invoices.filter { $0.isTrashed }.map(\.id))
         data.invoices.removeAll { $0.isTrashed }
+        unlinkMilestones(fromInvoices: gone)
         commitHistory()
+    }
+
+    // MARK: - Projects
+    //
+    // A project is the job; invoices are what it bills. Everything here keeps
+    // the two in step, because a schedule that lies about what has been
+    // invoiced is worse than no schedule at all.
+
+    /// Invoiced / paid against a job. Trashed invoices are excluded — they are
+    /// not bills any more — while archived ones still count, because the work
+    /// happened and was billed.
+    struct ProjectTotals: Equatable {
+        var invoiced: Decimal = 0
+        var paid: Decimal = 0
+        var outstanding: Decimal { (invoiced - paid).rounded(2) }
+        var invoiceCount: Int = 0
+
+        /// What is left of the contract to bill. Nil when no contract total was
+        /// given, rather than a misleading zero.
+        func remainingToBill(contractTotal: Decimal) -> Decimal? {
+            guard contractTotal > 0 else { return nil }
+            return (contractTotal - invoiced).rounded(2)
+        }
+    }
+
+    /// The invoice a milestone was billed with, but only while that invoice is
+    /// alive. A trashed invoice is not a bill any more — the totals already
+    /// leave it out — so the schedule must stop calling the milestone done and
+    /// offer to bill it again. Otherwise the two halves of this screen
+    /// contradict each other: "Invoice #12" beside "$0.00 invoiced".
+    func billedInvoice(for milestone: Milestone) -> Invoice? {
+        guard let id = milestone.invoiceID,
+              let invoice = invoice(id: id),
+              !invoice.isTrashed
+        else { return nil }
+        return invoice
+    }
+
+    func needsInvoicing(_ milestone: Milestone) -> Bool {
+        billedInvoice(for: milestone) == nil
+    }
+
+    func project(id: UUID?) -> Project? {
+        guard let id else { return nil }
+        return data.projects.first { $0.id == id }
+    }
+
+    func binding(projectID: UUID) -> Binding<Project>? {
+        guard data.projects.contains(where: { $0.id == projectID }) else { return nil }
+        return Binding(
+            get: { [weak self] in
+                self?.data.projects.first { $0.id == projectID } ?? Project()
+            },
+            set: { [weak self] newValue in
+                guard let self,
+                      let idx = self.data.projects.firstIndex(where: { $0.id == projectID })
+                else { return }
+                self.data.projects[idx] = newValue
+            }
+        )
+    }
+
+    /// Live invoices for a job, newest first. Trashed ones are left out.
+    func invoices(inProject projectID: UUID) -> [Invoice] {
+        data.invoices.filter { $0.projectID == projectID && !$0.isTrashed }
+    }
+
+    func totals(forProject projectID: UUID) -> ProjectTotals {
+        var totals = ProjectTotals()
+        for invoice in invoices(inProject: projectID) {
+            totals.invoiced += invoice.total
+            totals.paid += invoice.amountPaid
+            totals.invoiceCount += 1
+        }
+        totals.invoiced = totals.invoiced.rounded(2)
+        totals.paid = totals.paid.rounded(2)
+        return totals
+    }
+
+    @discardableResult
+    func newProject(customerID: UUID? = nil) -> Project {
+        commitHistory()
+        var project = Project()
+        project.customerID = customerID
+        data.projects.insert(project, at: 0)
+        commitHistory()
+        return project
+    }
+
+    /// Removes the job but never its invoices: they are real bills that were
+    /// really sent. They just stop belonging to anything.
+    func deleteProject(id: UUID) {
+        commitHistory()
+        data.projects.removeAll { $0.id == id }
+        for index in data.invoices.indices where data.invoices[index].projectID == id {
+            data.invoices[index].projectID = nil
+        }
+        commitHistory()
+    }
+
+    func setArchived(_ archived: Bool, onProject id: UUID) {
+        guard let index = data.projects.firstIndex(where: { $0.id == id }) else { return }
+        commitHistory()
+        data.projects[index].archivedAt = archived ? Date() : nil
+        commitHistory()
+    }
+
+    /// Turns one scheduled payment into a draft invoice and links the two.
+    ///
+    /// A draft, deliberately: the schedule says when something is *due*, not
+    /// that it is ready to send. Returns nil if the milestone has already been
+    /// invoiced, so pressing the button twice cannot bill a client twice.
+    @discardableResult
+    func createInvoice(forMilestone milestoneID: UUID, inProject projectID: UUID) -> Invoice? {
+        commitHistory()
+        let made = makeInvoice(forMilestone: milestoneID, inProject: projectID)
+        commitHistory()
+        return made
+    }
+
+    /// The mutation with no history of its own, so a batch can run it many
+    /// times inside a single step.
+    @discardableResult
+    private func makeInvoice(forMilestone milestoneID: UUID, inProject projectID: UUID) -> Invoice? {
+        guard let projectIndex = data.projects.firstIndex(where: { $0.id == projectID }),
+              let milestoneIndex = data.projects[projectIndex].milestones
+                  .firstIndex(where: { $0.id == milestoneID }),
+              needsInvoicing(data.projects[projectIndex].milestones[milestoneIndex])
+        else { return nil }
+
+        let project = data.projects[projectIndex]
+        let milestone = project.milestones[milestoneIndex]
+
+        var invoice = newInvoice(customerID: project.customerID)
+        invoice.projectID = projectID
+        invoice.dueDate = milestone.dueDate
+        invoice.items = [LineItem(
+            title: milestone.deliverable,
+            details: "",
+            quantity: 1,
+            price: milestone.amount,
+            taxable: false
+        )]
+        // newInvoice already inserted a copy; replace it with the filled one.
+        if let index = data.invoices.firstIndex(where: { $0.id == invoice.id }) {
+            data.invoices[index] = invoice
+        }
+        data.projects[projectIndex].milestones[milestoneIndex].invoiceID = invoice.id
+        return invoice
+    }
+
+    /// Bills every milestone that has not been billed yet, oldest due date
+    /// first so the invoice numbers run in the order the money is owed. One
+    /// history step for the batch, like the other bulk edits.
+    @discardableResult
+    func createInvoicesForUnbilled(inProject projectID: UUID) -> [Invoice] {
+        guard let projectIndex = data.projects.firstIndex(where: { $0.id == projectID })
+        else { return [] }
+        let pending = data.projects[projectIndex].milestones
+            .filter { needsInvoicing($0) }
+            .sorted { $0.dueDate < $1.dueDate }
+        guard !pending.isEmpty else { return [] }
+
+        commitHistory()
+        var made: [Invoice] = []
+        for milestone in pending {
+            if let invoice = makeInvoice(forMilestone: milestone.id, inProject: projectID) {
+                made.append(invoice)
+            }
+        }
+        commitHistory()
+        return made
+    }
+
+    /// Called when invoices are destroyed for good: a milestone must never
+    /// point at an invoice that is gone, or the schedule shows work as billed
+    /// that has no bill behind it.
+    private func unlinkMilestones(fromInvoices ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        for p in data.projects.indices {
+            for m in data.projects[p].milestones.indices
+            where data.projects[p].milestones[m].invoiceID.map(ids.contains) == true {
+                data.projects[p].milestones[m].invoiceID = nil
+            }
+        }
     }
 
     // MARK: - Bulk edits
@@ -625,6 +813,7 @@ final class AppStore: ObservableObject {
         guard !ids.isEmpty else { return }
         commitHistory()
         data.invoices.removeAll { ids.contains($0.id) }
+        unlinkMilestones(fromInvoices: ids)
         commitHistory()
     }
 

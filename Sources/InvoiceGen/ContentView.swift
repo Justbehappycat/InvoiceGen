@@ -60,6 +60,18 @@ struct ContentView: View {
                     message: "Pick an invoice on the left, or press ⌘N to start a new one."
                 )
             }
+        case .projects:
+            if let id = focus.projectID, let binding = store.binding(projectID: id) {
+                ProjectDetailView(project: binding)
+                    .id(id)
+            } else {
+                EmptyStateView(
+                    systemImage: "folder",
+                    title: "No project selected",
+                    message: "A project holds one job: its payment schedule, its invoices, "
+                           + "and what is still owed on it."
+                )
+            }
         case .customers:
             if let id = focus.customerID, let binding = store.binding(customerID: id) {
                 CustomerDetailView(customer: binding)

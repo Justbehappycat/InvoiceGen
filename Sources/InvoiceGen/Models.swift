@@ -187,6 +187,91 @@ struct Customer: Identifiable, Codable, Hashable {
 
 // MARK: - Line items
 
+/// A job: one production, one contract, one set of deadlines.
+///
+/// Film and post work is billed per production, not per invoice. A podcast
+/// series is one agreement with a payment schedule running down it, and the
+/// question that matters mid-job is "what have I invoiced against this, and
+/// what is still owed" — which no single invoice can answer.
+struct Project: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    var name: String = ""
+    var customerID: UUID?
+    /// What the contract is worth in total. Zero means it was never stated —
+    /// plenty of jobs are open-ended, so this stays optional in spirit.
+    var contractTotal: Decimal = 0
+    var milestones: [Milestone] = []
+    var notes: String = ""
+    var createdAt: Date = Date()
+    /// Finished and filed away, the way an archived invoice is.
+    var archivedAt: Date?
+
+    var isArchived: Bool { archivedAt != nil }
+    var displayName: String { name.isEmpty ? "Untitled project" : name }
+    var hasContractTotal: Bool { contractTotal > 0 }
+
+    /// The schedule's own total, which is not always the contract's: a job can
+    /// be scheduled in part, or carry a milestone added later.
+    var scheduledTotal: Decimal {
+        milestones.reduce(0) { $0 + $1.amount }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, customerID, contractTotal, milestones, notes, createdAt, archivedAt
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        customerID = try c.decodeIfPresent(UUID.self, forKey: .customerID)
+        contractTotal = try c.decodeIfPresent(Decimal.self, forKey: .contractTotal) ?? 0
+        milestones = try c.decodeIfPresent([Milestone].self, forKey: .milestones) ?? []
+        notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
+    }
+}
+
+/// One scheduled payment: a deliverable, what it pays, and when it is due.
+///
+/// `invoiceID` is the link back to the invoice this milestone produced, so the
+/// schedule can show what has been billed without guessing. It stays nil until
+/// the invoice is made, and goes back to nil if that invoice is destroyed.
+struct Milestone: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    var deliverable: String = ""
+    var amount: Decimal = 0
+    var dueDate: Date = Date()
+    var invoiceID: UUID?
+
+    var isInvoiced: Bool { invoiceID != nil }
+    var displayName: String { deliverable.isEmpty ? "Untitled milestone" : deliverable }
+
+    enum CodingKeys: String, CodingKey {
+        case id, deliverable, amount, dueDate, invoiceID
+    }
+
+    init() {}
+
+    init(deliverable: String, amount: Decimal, dueDate: Date) {
+        self.deliverable = deliverable
+        self.amount = amount
+        self.dueDate = dueDate
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        deliverable = try c.decodeIfPresent(String.self, forKey: .deliverable) ?? ""
+        amount = try c.decodeIfPresent(Decimal.self, forKey: .amount) ?? 0
+        dueDate = try c.decodeIfPresent(Date.self, forKey: .dueDate) ?? Date()
+        invoiceID = try c.decodeIfPresent(UUID.self, forKey: .invoiceID)
+    }
+}
+
 struct LineItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var title: String = ""
@@ -234,6 +319,8 @@ struct Invoice: Identifiable, Codable, Hashable {
     var poNumber: String = ""
     var title: String = "INVOICE"
     var customerID: UUID?
+    /// The job this invoice belongs to, if any.
+    var projectID: UUID?
     var issueDate: Date = Date()
     var dueDate: Date = Date().addingTimeInterval(30 * 86400)
     var items: [LineItem] = []
@@ -272,7 +359,7 @@ struct Invoice: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, number, poNumber, title, customerID, issueDate, dueDate, items
+        case id, number, poNumber, title, customerID, projectID, issueDate, dueDate, items
         case discountIsPercent, discountValue, taxLabel, taxRate, amountPaid
         case notes, footerMessage, currencyCode, status, createdAt, paymentMethods, columns
         case archivedAt, deletedAt, publishedID, publishedAt
@@ -287,6 +374,7 @@ struct Invoice: Identifiable, Codable, Hashable {
         poNumber = try c.decodeIfPresent(String.self, forKey: .poNumber) ?? ""
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? "INVOICE"
         customerID = try c.decodeIfPresent(UUID.self, forKey: .customerID)
+        projectID = try c.decodeIfPresent(UUID.self, forKey: .projectID)
         issueDate = try c.decodeIfPresent(Date.self, forKey: .issueDate) ?? Date()
         dueDate = try c.decodeIfPresent(Date.self, forKey: .dueDate) ?? Date()
         items = try c.decodeIfPresent([LineItem].self, forKey: .items) ?? []
@@ -369,11 +457,12 @@ struct AppData: Codable, Equatable {
     var customers: [Customer] = []
     var invoices: [Invoice] = []
     var catalog: [CatalogItem] = []
+    var projects: [Project] = []
     var templates: [InvoiceTemplate] = []
     var nextInvoiceNumber: Int = 1
 
     enum CodingKeys: String, CodingKey {
-        case business, customers, invoices, catalog, templates, nextInvoiceNumber
+        case business, customers, invoices, catalog, projects, templates, nextInvoiceNumber
     }
 
     init() {}
@@ -384,6 +473,7 @@ struct AppData: Codable, Equatable {
         customers = try c.decodeIfPresent([Customer].self, forKey: .customers) ?? []
         invoices = try c.decodeIfPresent([Invoice].self, forKey: .invoices) ?? []
         catalog = try c.decodeIfPresent([CatalogItem].self, forKey: .catalog) ?? []
+        projects = try c.decodeIfPresent([Project].self, forKey: .projects) ?? []
         templates = try c.decodeIfPresent([InvoiceTemplate].self, forKey: .templates) ?? []
         nextInvoiceNumber = try c.decodeIfPresent(Int.self, forKey: .nextInvoiceNumber) ?? 1
     }

@@ -23,6 +23,7 @@ enum UIShot {
         let focus = AppFocus()
         focus.invoiceID = store.data.invoices.first?.id
         focus.customerID = store.data.customers.first?.id
+        focus.projectID = store.data.projects.first?.id
 
         // "sidebar" captures the left column on its own: inside a real
         // NavigationSplitView its material background defeats cacheDisplay.

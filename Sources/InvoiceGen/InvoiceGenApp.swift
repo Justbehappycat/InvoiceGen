@@ -1207,6 +1207,192 @@ struct InvoiceGenApp: App {
 
             exit(failed ? 1 : 0)
         }
+        if args.contains("--selftest-project") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            // Mutating test: never let it near the real data file.
+            isolateDataDirectoryForDiagnostics()
+            _ = NSApplication.shared
+            var failures = 0
+            func check(_ label: String, _ condition: Bool) {
+                print("  \(condition ? "ok  " : "FAIL") \(label)")
+                if !condition { failures += 1 }
+            }
+
+            MainActor.assumeIsolated {
+                let store = AppStore.shared
+                store.data.invoices = []
+                store.data.projects = []
+
+                let customer = store.newCustomer(name: "Lantern Road Media")
+                var project = store.newProject(customerID: customer.id)
+                project.name = "Night Shift — S1"
+                project.contractTotal = 1200
+                // The shape of a real podcast contract: staggered episode
+                // payments, a fortnight apart.
+                func day(_ offset: Int) -> Date {
+                    Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date()
+                }
+                project.milestones = [
+                    Milestone(deliverable: "Episode 1", amount: 150, dueDate: day(1)),
+                    Milestone(deliverable: "Episodes 2-3", amount: 300, dueDate: day(8)),
+                    Milestone(deliverable: "Episodes 4-5", amount: 300, dueDate: day(22)),
+                    Milestone(deliverable: "Episodes 6-8", amount: 450, dueDate: day(36)),
+                ]
+                store.data.projects[0] = project
+                let projectID = project.id
+                store.commitHistory()
+
+                print("the schedule:")
+                check("adds up to the contract",
+                      store.data.projects[0].scheduledTotal == 1200)
+
+                print("one milestone becomes one draft invoice:")
+                let first = store.data.projects[0].milestones[0]
+                guard let made = store.createInvoice(forMilestone: first.id, inProject: projectID)
+                else {
+                    print("  FAIL could not create the invoice"); exit(1)
+                }
+                let live = store.invoice(id: made.id)
+                check("belongs to the project", live?.projectID == projectID)
+                check("bills the client from the project", live?.customerID == customer.id)
+                check("due on the milestone's date",
+                      live.map { Calendar.current.isDate($0.dueDate, inSameDayAs: first.dueDate) } == true)
+                check("carries the deliverable", live?.items.first?.title == "Episode 1")
+                check("totals the milestone amount", live?.total == 150)
+                check("starts as a draft", live?.status == .draft)
+                check("milestone now points at it",
+                      store.data.projects[0].milestones[0].invoiceID == made.id)
+
+                print("a milestone cannot be billed twice:")
+                check("second attempt refuses",
+                      store.createInvoice(forMilestone: first.id, inProject: projectID) == nil)
+                check("still exactly one invoice", store.invoices(inProject: projectID).count == 1)
+
+                print("totals:")
+                var totals = store.totals(forProject: projectID)
+                check("invoiced 150", totals.invoiced == 150)
+                check("paid nothing yet", totals.paid == 0)
+                check("outstanding 150", totals.outstanding == 150)
+                check("1050 of the contract left to bill",
+                      totals.remainingToBill(contractTotal: 1200) == 1050)
+                check("no contract total means no claim about what is left",
+                      totals.remainingToBill(contractTotal: 0) == nil)
+
+                store.setStatus(.paid, on: made.id)
+                totals = store.totals(forProject: projectID)
+                check("paying settles the outstanding", totals.outstanding == 0)
+                check("paid 150", totals.paid == 150)
+
+                print("billing the rest is one undo step:")
+                let rest = store.createInvoicesForUnbilled(inProject: projectID)
+                check("made the three remaining", rest.count == 3)
+                check("oldest due date first",
+                      rest.map(\.dueDate) == rest.map(\.dueDate).sorted())
+                check("every milestone is now billed",
+                      store.data.projects[0].milestones.allSatisfy { $0.isInvoiced })
+                totals = store.totals(forProject: projectID)
+                check("invoiced the whole contract", totals.invoiced == 1200)
+                store.undo()
+                check("one undo takes all three back",
+                      store.invoices(inProject: projectID).count == 1)
+                check("and unbills their milestones",
+                      store.data.projects[0].milestones.filter { $0.isInvoiced }.count == 1)
+
+                print("trashed invoices stop counting, archived ones don't:")
+                _ = store.createInvoicesForUnbilled(inProject: projectID)
+                let second = store.invoices(inProject: projectID)
+                    .first { $0.id != made.id }!
+                store.setArchived(true, on: second.id)
+                check("archived still counts as billed",
+                      store.totals(forProject: projectID).invoiced == 1200)
+                store.deleteInvoice(id: second.id)
+                check("trashed drops out of the total",
+                      store.totals(forProject: projectID).invoiced == 1200 - second.total)
+                check("and out of the project's list",
+                      !store.invoices(inProject: projectID).contains { $0.id == second.id })
+
+                print("a trashed invoice releases its milestone:")
+                // Found by looking at the screen: the schedule said "Invoice
+                // #12" while the money said "$0.00 invoiced", because the
+                // invoice had been trashed. Both halves must agree.
+                let third = store.invoices(inProject: projectID).first { $0.id != made.id }!
+                let itsMilestone = store.data.projects[0].milestones
+                    .first { $0.invoiceID == third.id }!
+                check("counts as billed while the invoice lives",
+                      !store.needsInvoicing(itsMilestone))
+                store.deleteInvoice(id: third.id)
+                let afterTrash = store.data.projects[0].milestones
+                    .first { $0.id == itsMilestone.id }!
+                check("stops counting as billed once trashed",
+                      store.needsInvoicing(afterTrash))
+                check("and the schedule offers no stale link",
+                      store.billedInvoice(for: afterTrash) == nil)
+                check("so it can be billed again",
+                      store.createInvoice(forMilestone: afterTrash.id,
+                                          inProject: projectID) != nil)
+                store.undo()
+
+                print("destroying an invoice unbills its milestone:")
+                store.permanentlyDelete(id: second.id)
+                check("milestone is free again",
+                      store.data.projects[0].milestones.contains {
+                          $0.invoiceID == nil
+                      })
+                check("no milestone points at a missing invoice",
+                      store.data.projects[0].milestones.allSatisfy { milestone in
+                          milestone.invoiceID.map { store.invoice(id: $0) != nil } ?? true
+                      })
+
+                print("deleting the job keeps the bills:")
+                let before = store.invoices(inProject: projectID).count
+                store.deleteProject(id: projectID)
+                check("project is gone", store.project(id: projectID) == nil)
+                check("its invoices survive",
+                      store.data.invoices.filter { !$0.isTrashed }.count >= before)
+                check("they just belong to nothing",
+                      store.data.invoices.allSatisfy { $0.projectID == nil })
+
+                print("round trip through the data file:")
+                var sample = AppData()
+                var keep = Project()
+                keep.name = "Kept"
+                keep.contractTotal = 500
+                keep.milestones = [Milestone(deliverable: "Cut 1", amount: 500, dueDate: Date())]
+                sample.projects = [keep]
+                var attached = Invoice()
+                attached.projectID = keep.id
+                sample.invoices = [attached]
+                // Same date strategy the store writes with. A plain
+                // JSONEncoder round-trips happily on timestamps the real file
+                // would reject, so testing without this proves less than it
+                // looks — the app stores dates as ISO 8601.
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                guard let encoded = try? encoder.encode(sample),
+                      let decoded = try? decoder.decode(AppData.self, from: encoded) else {
+                    print("  FAIL could not round-trip"); exit(1)
+                }
+                check("projects survive", decoded.projects.first?.name == "Kept")
+                check("milestones survive",
+                      decoded.projects.first?.milestones.first?.amount == 500)
+                check("the invoice keeps its project",
+                      decoded.invoices.first?.projectID == keep.id)
+
+                // The reason Invoice and Project decode by hand: a file written
+                // before projects existed has no such keys at all.
+                let old = Data(#"{"invoices":[{"number":"7"}],"nextInvoiceNumber":8}"#.utf8)
+                let migrated = try? decoder.decode(AppData.self, from: old)
+                check("a file from before projects still opens", migrated != nil)
+                check("and simply has none", migrated?.projects.isEmpty == true)
+                check("its invoices belong to no project",
+                      migrated?.invoices.first?.projectID == nil)
+            }
+
+            print(failures == 0 ? "all project checks passed" : "\(failures) FAILED")
+            exit(failures == 0 ? 0 : 1)
+        }
         if args.contains("--selftest-columns") {
             _ = NSApplication.shared
             let store = AppStore.shared
@@ -1501,6 +1687,7 @@ final class AppFocus: ObservableObject {
     @Published var selectedInvoiceIDs: Set<UUID> = []
 
     @Published var customerID: UUID?
+    @Published var projectID: UUID?
     @Published var requestedSection: SidebarSection?
 
     var isMultiSelecting: Bool { selectedInvoiceIDs.count > 1 }
@@ -1514,6 +1701,7 @@ final class AppFocus: ObservableObject {
 
 enum SidebarSection: String, CaseIterable, Identifiable {
     case invoices
+    case projects
     case customers
     case items
     case settings
@@ -1523,6 +1711,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .invoices: return "Invoices"
+        case .projects: return "Projects"
         case .customers: return "Customers"
         case .items: return "Items"
         case .settings: return "Settings"
@@ -1532,6 +1721,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .invoices: return "doc.text"
+        case .projects: return "folder"
         case .customers: return "person.2"
         case .items: return "shippingbox"
         case .settings: return "gearshape"

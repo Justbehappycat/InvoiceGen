@@ -37,7 +37,7 @@ struct SidebarView: View {
 
     /// Only the two day-to-day sections switch here. Saved items and Settings
     /// live in the bar at the bottom: they are set-up, not daily work.
-    private static let primarySections: [SidebarSection] = [.invoices, .customers]
+    private static let primarySections: [SidebarSection] = [.invoices, .projects, .customers]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +56,7 @@ struct SidebarView: View {
 
             switch section {
             case .customers: customerList
+            case .projects: projectList
             default: invoiceList
             }
 
@@ -358,6 +359,92 @@ struct SidebarView: View {
             $0.displayName.localizedCaseInsensitiveContains(search)
                 || $0.email.localizedCaseInsensitiveContains(search)
         }
+    }
+
+    private var filteredProjects: [Project] {
+        // Archived jobs sink to the bottom rather than vanish: the work still
+        // happened, and last year's series is exactly what you go looking for.
+        let all = store.data.projects.sorted { a, b in
+            if a.isArchived != b.isArchived { return !a.isArchived }
+            return a.createdAt > b.createdAt
+        }
+        guard !search.isEmpty else { return all }
+        return all.filter {
+            $0.displayName.localizedCaseInsensitiveContains(search)
+                || (store.customer(id: $0.customerID)?.displayName
+                    .localizedCaseInsensitiveContains(search) ?? false)
+        }
+    }
+
+    private var projectList: some View {
+        List(selection: Binding(get: { focus.projectID }, set: { focus.projectID = $0 })) {
+            ForEach(filteredProjects) { project in
+                let totals = store.totals(forProject: project.id)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(project.displayName).font(.body)
+                        if project.isArchived {
+                            Image(systemName: "archivebox")
+                                .imageScale(.small)
+                                .help("Archived")
+                                .accessibilityLabel("Archived")
+                        }
+                    }
+                    if let customer = store.customer(id: project.customerID) {
+                        Text(customer.displayName).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text(projectSummary(project, totals: totals))
+                        .font(.caption)
+                        .foregroundStyle(totals.outstanding > 0 ? .orange : .secondary)
+                }
+                .padding(.vertical, 2)
+                .tag(project.id)
+                .contextMenu {
+                    Button(project.isArchived ? "Unarchive" : "Archive") {
+                        store.setArchived(!project.isArchived, onProject: project.id)
+                    }
+                    Button("Delete", role: .destructive) {
+                        if focus.projectID == project.id { focus.projectID = nil }
+                        store.deleteProject(id: project.id)
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button {
+                        let project = store.newProject()
+                        focus.projectID = project.id
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                BarDivider()
+            }
+            .liquidGlassBar()
+        }
+        .searchable(text: $search, placement: .sidebar, prompt: "Search projects")
+    }
+
+    /// One line of money, which is the thing you open a job to find out.
+    private func projectSummary(_ project: Project, totals: AppStore.ProjectTotals) -> String {
+        let code = store.data.business.currencyCode
+        if totals.outstanding > 0 {
+            return "\(Fmt.currency(totals.outstanding, code: code)) outstanding"
+        }
+        if totals.invoiced > 0 {
+            return "\(Fmt.currency(totals.invoiced, code: code)) invoiced · paid up"
+        }
+        if project.hasContractTotal {
+            return "\(Fmt.currency(project.contractTotal, code: code)) contracted · nothing invoiced"
+        }
+        return "Nothing invoiced yet"
     }
 
     private var customerList: some View {

@@ -73,6 +73,35 @@ unconfigured or plain-http address refuses to publish at all.
   across a page break, continuation pages repeat the column headers, and pages
   are filled with rows before the totals block moves to a sheet of its own.
 
+**Projects** — one job, its schedule, and what it still owes
+- Film and post work is billed per production, not per invoice. A project holds
+  the client, what the contract is worth, the payment schedule and every invoice
+  raised against it, and answers the question a single invoice cannot: what has
+  been billed, what has been paid, and what is left.
+- **The payment schedule is the contract.** Enter the dates it pays on —
+  `Episode 1, $150, 30 Oct` / `Episodes 2-3, $300, 6 Nov` — and each line turns
+  into a draft invoice on demand, carrying the deliverable as its line item, the
+  milestone's date as its due date and the project's client as the customer.
+- Drafts, never sends. "Invoice 3 unbilled" bills everything outstanding in one
+  go, oldest due date first so the numbers run in the order the money is owed —
+  and ⌘Z takes the whole batch back in a single step.
+- **A milestone cannot be billed twice.** The schedule links to the invoice it
+  produced, and the button is gone while that invoice exists.
+- A trashed invoice releases its milestone. It stops counting toward the totals,
+  so the schedule stops calling it billed and offers to raise it again —
+  otherwise the screen contradicts itself, showing "Invoice #12" beside
+  "$0.00 invoiced". Destroying an invoice for good unlinks it the same way.
+- Trashed invoices drop out of the totals; archived ones still count, because
+  the work happened and was billed.
+- Deleting a project never deletes its invoices. They were real bills; they just
+  stop belonging to a job.
+- If the schedule doesn't add up to the contract total, the project says so
+  rather than quietly disagreeing with itself.
+- Projects are optional. An invoice with no project behaves exactly as before,
+  and a data file written before projects existed opens untouched.
+- `--selftest-project` covers all of it, including the undo batching and the
+  pre-projects file.
+
 **Invoice verification**
 - **Stripes across the banner** (default): the code runs the banner's full
   height behind the title — edge to edge, top and bottom — and nearly the full
