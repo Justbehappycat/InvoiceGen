@@ -759,6 +759,45 @@ final class AppStore: ObservableObject {
         return made
     }
 
+    /// Creates the job a contract describes: the client if they are new, the
+    /// project, and its schedule. One history step, so a misread contract is
+    /// one ⌘Z away from never having happened.
+    ///
+    /// An existing client with the same name is reused rather than duplicated
+    /// -- importing the second contract from a regular client should not leave
+    /// two of them in the list.
+    @discardableResult
+    func importProject(from draft: ContractImport.Draft) -> Project {
+        commitHistory()
+
+        var customerID: UUID?
+        let wanted = draft.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !wanted.isEmpty {
+            if let existing = data.customers.first(where: {
+                $0.name.caseInsensitiveCompare(wanted) == .orderedSame
+            }) {
+                customerID = existing.id
+            } else {
+                var customer = Customer()
+                customer.name = wanted
+                customer.email = draft.customerEmail
+                customer.updatedAt = Date()
+                data.customers.append(customer)
+                customerID = customer.id
+            }
+        }
+
+        var project = Project()
+        project.name = draft.projectTitle
+        project.customerID = customerID
+        project.contractTotal = draft.contractTotal
+        project.milestones = draft.milestones
+        data.projects.insert(project, at: 0)
+
+        commitHistory()
+        return project
+    }
+
     /// Called when invoices are destroyed for good: a milestone must never
     /// point at an invoice that is gone, or the schedule shows work as billed
     /// that has no bill behind it.

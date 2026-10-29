@@ -34,6 +34,7 @@ struct SidebarView: View {
     /// Which pile of invoices the list is showing. Kept in preferences so the
     /// app doesn't reopen in the trash.
     @AppStorage("invoiceScope") private var scope: InvoiceScope = .active
+    @State private var isImportingContract = false
 
     /// Only the two day-to-day sections switch here. Saved items and Settings
     /// live in the bar at the bottom: they are set-up, not daily work.
@@ -415,13 +416,30 @@ struct SidebarView: View {
             VStack(spacing: 0) {
                 HStack {
                     Spacer()
-                    Button {
-                        let project = store.newProject()
-                        focus.projectID = project.id
-                    } label: {
-                        Label("New", systemImage: "plus")
+                    // With the on-device model available, "New" offers a
+                    // contract as a starting point; without it, it is the
+                    // plain button it always was.
+                    if OnDeviceAssist.isReady {
+                        Menu {
+                            Button("Empty Project") {
+                                let project = store.newProject()
+                                focus.projectID = project.id
+                            }
+                            Button("From a Contract…") { isImportingContract = true }
+                        } label: {
+                            Label("New", systemImage: "plus")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                    } else {
+                        Button {
+                            let project = store.newProject()
+                            focus.projectID = project.id
+                        } label: {
+                            Label("New", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderless)
                     }
-                    .buttonStyle(.borderless)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -430,6 +448,11 @@ struct SidebarView: View {
             .liquidGlassBar()
         }
         .searchable(text: $search, placement: .sidebar, prompt: "Search projects")
+        .sheet(isPresented: $isImportingContract) {
+            ContractImportView()
+                .environmentObject(store)
+                .environmentObject(focus)
+        }
     }
 
     /// One line of money, which is the thing you open a job to find out.

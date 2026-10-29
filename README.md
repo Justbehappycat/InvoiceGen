@@ -102,8 +102,30 @@ unconfigured or plain-http address refuses to publish at all.
 - `--selftest-project` covers all of it, including the undo batching and the
   pre-projects file.
 
+**Import a contract** (needs the on-device model — see On-device assist)
+- Projects ▸ New ▸ From a Contract… reads a contract PDF and proposes the
+  client, the project and its whole payment schedule, so a job that arrives as
+  a PDF is not typed in by hand.
+- **Read on this Mac.** A contract is the most sensitive thing this app will
+  ever open, so it goes to `SystemLanguageModel` and nowhere else. The build
+  refuses the Private Cloud Compute model outright.
+- **The model extracts; the app does the numbers.** Every amount and date comes
+  back as text and is parsed here in `Decimal`. A payment whose amount or date
+  cannot be read is not guessed at — it is listed under "Not used" so you can
+  see what was left out. The contract total is summed by the app from the
+  parsed amounts; the model is never asked for it.
+- **Nothing is created until you say so.** Every field arrives editable in a
+  review sheet. Creating is one undo step, and a client whose name already
+  exists is reused rather than duplicated.
+- Long contracts are trimmed to their opening and the paragraphs that mention
+  money before they are read. A scanned contract has no text to read, and is
+  refused with an explanation rather than handed to the model empty.
+- `--selftest-contract` covers the parsing and its refusals with no model,
+  reads a real generated PDF through PDFKit, and — where the model exists —
+  extracts a four-payment schedule end to end.
+
 **Invoice verification**
-- **Stripes across the banner** (default): the code runs the banner's full
+- **Stripes across the banner** (default, at 4%): the code runs the banner's full
   height behind the title — edge to edge, top and bottom — and nearly the full
   width of the coloured block, so a reading taken above or below the word
   crosses every column. The stripes print as a tint of the banner — a slider sets how

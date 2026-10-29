@@ -1398,6 +1398,167 @@ struct InvoiceGenApp: App {
             print(failures == 0 ? "all project checks passed" : "\(failures) FAILED")
             exit(failures == 0 ? 0 : 1)
         }
+        if args.contains("--selftest-contract") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            isolateDataDirectoryForDiagnostics()
+            _ = NSApplication.shared
+            var failures = 0
+            func check(_ label: String, _ condition: Bool) {
+                print("  \(condition ? "ok  " : "FAIL") \(label)")
+                if !condition { failures += 1 }
+            }
+
+            print("amounts are parsed here, never by the model:")
+            check("1200", ContractImport.parseAmount("1200") == 1200)
+            check("$1,200.00", ContractImport.parseAmount("$1,200.00") == 1200)
+            check("150.50", ContractImport.parseAmount("150.50") == Decimal(string: "150.50"))
+            check("refuses words", ContractImport.parseAmount("three hundred") == nil)
+            check("refuses empty", ContractImport.parseAmount("") == nil)
+            check("refuses zero", ContractImport.parseAmount("0") == nil)
+            check("refuses two decimal points", ContractImport.parseAmount("1.2.3") == nil)
+
+            print("dates:")
+            check("2026-10-30", ContractImport.parseDate("2026-10-30") != nil)
+            check("refuses 31 February", ContractImport.parseDate("2026-02-31") == nil)
+            check("refuses month 13", ContractImport.parseDate("2026-13-01") == nil)
+            check("refuses prose", ContractImport.parseDate("end of October") == nil)
+            check("refuses empty", ContractImport.parseDate("") == nil)
+
+            print("a draft keeps what parses and shows what didn't:")
+            let fields = ContractImport.Fields(
+                clientName: " Lantern Road Media ",
+                clientEmail: "dana@lanternroad.example",
+                projectTitle: "Night Shift",
+                paymentTermDays: 15,
+                milestones: [
+                    .init(deliverable: "Episodes 2-3", amount: "300", dueDate: "2026-11-06"),
+                    .init(deliverable: "Episode 1", amount: "150", dueDate: "2026-10-30"),
+                    .init(deliverable: "Bonus", amount: "TBD", dueDate: "2026-12-01"),
+                    .init(deliverable: "Wrap", amount: "200", dueDate: ""),
+                ])
+            let draft = ContractImport.draft(from: fields)
+            check("trims the client", draft.customerName == "Lantern Road Media")
+            check("keeps the two good payments", draft.milestones.count == 2)
+            check("sorted by due date", draft.milestones.first?.deliverable == "Episode 1")
+            check("lists the two it refused", draft.discarded.count == 2)
+            check("total summed from parsed values", draft.contractTotal == 450)
+            check("keeps the payment terms", draft.paymentTermDays == 15)
+            let silly = ContractImport.draft(from: .init(paymentTermDays: 9000))
+            check("absurd terms fall back to 30", silly.paymentTermDays == 30)
+
+            print("long contracts are trimmed to the parts about money:")
+            let boiler = String(repeating: "Boilerplate clause about confidentiality.\n", count: 400)
+            let long = "Agreement between Lantern Road Media and the Contractor.\n" + boiler
+                + "Compensation: Episode 1, $150, due 2026-10-30.\n" + boiler
+            let excerpt = ContractImport.relevantExcerpt(long, limit: 2000)
+            check("fits the limit", excerpt.count <= 2000)
+            check("keeps the opening", excerpt.contains("Lantern Road Media"))
+            check("keeps the compensation clause", excerpt.contains("Episode 1, $150"))
+            check("a short contract passes through whole",
+                  ContractImport.relevantExcerpt("short", limit: 2000) == "short")
+
+            MainActor.assumeIsolated {
+                let store = AppStore.shared
+                store.data.projects = []
+                store.data.customers = []
+                store.commitHistory()
+
+                print("importing creates the job in one undo step:")
+                let project = store.importProject(from: draft)
+                check("project made", store.project(id: project.id) != nil)
+                check("named from the contract", project.name == "Night Shift")
+                check("carries the schedule", project.milestones.count == 2)
+                check("client created", store.data.customers.count == 1)
+                check("project bills that client",
+                      project.customerID == store.data.customers.first?.id)
+                store.undo()
+                check("one undo removes the project", store.data.projects.isEmpty)
+                check("and the client it made", store.data.customers.isEmpty)
+
+                print("a returning client is reused, not duplicated:")
+                let regular = store.newCustomer(name: "Lantern Road Media")
+                store.commitHistory()
+                let second = store.importProject(from: draft)
+                check("still one client", store.data.customers.count == 1)
+                check("pointing at the existing one", second.customerID == regular.id)
+            }
+
+            print("reading a real PDF:")
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ig-contract-\(UUID().uuidString)")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let pdfURL = dir.appendingPathComponent("contract.pdf")
+            let contractText = """
+            INDEPENDENT CONTRACTOR AGREEMENT — POST PRODUCTION
+
+            Client: Lantern Road Media LLC
+            Billing contact: dana@lanternroad.example
+
+            Contractor shall edit the podcast series "Night Shift" (8 episodes).
+
+            COMPENSATION
+            Episode 1 ............ $150, payable 2026-10-30
+            Episodes 2-3 ......... $300, payable 2026-11-06
+            Episodes 4-5 ......... $300, payable 2026-11-20
+            Episodes 6-8 ......... $450, payable 2026-12-04
+
+            Payment by Zelle within 15 days of invoice.
+            """
+            // An NSTextView's PDF carries real, selectable text -- the same
+            // kind PDFKit reads out of a contract someone emailed.
+            MainActor.assumeIsolated {
+                let view = NSTextView(frame: NSRect(x: 0, y: 0, width: 612, height: 792))
+                view.string = contractText
+                view.font = .systemFont(ofSize: 12)
+                try? view.dataWithPDF(inside: view.bounds).write(to: pdfURL)
+            }
+            let extracted = try? ContractImport.text(fromPDF: pdfURL)
+            check("PDFKit gets the text back", extracted?.contains("Lantern Road Media") == true)
+
+            let emptyURL = dir.appendingPathComponent("scan.pdf")
+            MainActor.assumeIsolated {
+                let blank = NSView(frame: NSRect(x: 0, y: 0, width: 612, height: 792))
+                try? blank.dataWithPDF(inside: blank.bounds).write(to: emptyURL)
+            }
+            var refusedScan = false
+            do { _ = try ContractImport.text(fromPDF: emptyURL) }
+            catch ContractImport.Failure.noText { refusedScan = true }
+            catch {}
+            check("a PDF with no text is refused, not guessed at", refusedScan)
+
+            if OnDeviceAssist.isReady, let extracted {
+                print("on-device extraction (live):")
+                nonisolated(unsafe) var live: Result<ContractImport.Draft, Error>?
+                Task {
+                    do { live = .success(try await ContractImport.extract(from: extracted)) }
+                    catch { live = .failure(error) }
+                }
+                let deadline = Date().addingTimeInterval(120)
+                while live == nil, Date() < deadline {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+                }
+                switch live {
+                case .success(let found):
+                    print("    client: \(found.customerName)   project: \(found.projectTitle)")
+                    for m in found.milestones {
+                        print("    \(Fmt.shortDate(m.dueDate))  \(m.deliverable)  \(m.amount)")
+                    }
+                    check("found the client", found.customerName.contains("Lantern Road"))
+                    check("found all four payments", found.milestones.count == 4)
+                    check("totals 1200, summed by the app", found.contractTotal == 1200)
+                case .failure(let error):
+                    check("extraction answered (\(error.localizedDescription))", false)
+                case nil:
+                    check("extraction answered within 120s", false)
+                }
+            } else {
+                print("  (no on-device model here — skipping the live extraction)")
+            }
+            try? FileManager.default.removeItem(at: dir)
+
+            print(failures == 0 ? "all contract checks passed" : "\(failures) FAILED")
+            exit(failures == 0 ? 0 : 1)
+        }
         if args.contains("--selftest-columns") {
             _ = NSApplication.shared
             let store = AppStore.shared
