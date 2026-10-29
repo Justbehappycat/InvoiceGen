@@ -42,7 +42,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $section) {
+            Picker("Section", selection: $section) {
                 ForEach(Self.primarySections) { item in
                     Text(item.label).tag(item)
                 }
@@ -345,7 +345,7 @@ struct SidebarView: View {
             if overdue > 0 {
                 Text("\(overdue) overdue")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(StatusTone.overdue.text)
             }
         }
         .padding(.horizontal, 12)
@@ -394,9 +394,16 @@ struct SidebarView: View {
                     if let customer = store.customer(id: project.customerID) {
                         Text(customer.displayName).font(.caption).foregroundStyle(.secondary)
                     }
-                    Text(projectSummary(project, totals: totals))
-                        .font(.caption)
-                        .foregroundStyle(totals.outstanding > 0 ? .orange : .secondary)
+                    Group {
+                        if totals.outstanding > 0 {
+                            Text(projectSummary(project, totals: totals))
+                                .statusForeground(.overdue)
+                        } else {
+                            Text(projectSummary(project, totals: totals))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.caption)
                 }
                 .padding(.vertical, 2)
                 .tag(project.id)

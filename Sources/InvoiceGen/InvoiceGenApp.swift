@@ -45,6 +45,24 @@ struct InvoiceGenApp: App {
             _ = NSApplication.shared
             NSApp.appearance = NSAppearance(named: args[index + 1] == "dark" ? .darkAqua : .aqua)
         }
+        // UI regression suite. UI-check mode has to be switched on before
+        // anything touches the store, so this runs first: no Keychain, no
+        // saving, an isolated data folder.
+        if let index = args.firstIndex(of: "--selftest-ui") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            isolateDataDirectoryForDiagnostics()
+            setenv("INVOICEGEN_UI_CHECK", "1", 1)
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.accessory)
+            // This runs inside App.init, before SwiftUI would start the app,
+            // and the accessibility server only answers once launching has
+            // finished -- without this every query fails "cannot complete".
+            NSApp.finishLaunching()
+            let next = index + 1 < args.count ? args[index + 1] : ""
+            let directory = next.isEmpty || next.hasPrefix("--") ? nil : next
+            let code = MainActor.assumeIsolated { UIRegression.run(snapshotDirectory: directory) }
+            exit(code)
+        }
         if let index = args.firstIndex(of: "--render-ui"), index + 1 < args.count {
             _ = NSApplication.shared
             NSApp.setActivationPolicy(.accessory)

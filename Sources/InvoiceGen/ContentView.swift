@@ -120,7 +120,7 @@ struct InvoiceRow: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(invoice.isOverdue ? .orange : .secondary)
+                .modifier(DueLineStyle(overdue: invoice.isOverdue))
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -139,22 +139,43 @@ struct StatusChip: View {
     let status: InvoiceStatus
     var overdue: Bool = false
 
-    private var color: Color {
-        if overdue { return .orange }
-        switch status {
-        case .draft: return .gray
-        case .sent: return .blue
-        case .paid: return .green
+    private var tone: StatusTone { StatusTone(status: status, overdue: overdue) }
+    private var label: String { overdue ? "Overdue" : status.label }
+
+    var body: some View {
+        if #available(macOS 14.0, *) {
+            ProminenceAwareChip(label: label, tone: tone)
+        } else {
+            StatusChip.capsule(label, tone: tone, onAccent: false)
         }
     }
 
-    var body: some View {
-        Text(overdue ? "Overdue" : status.label)
+    /// On the accent-coloured focused selection the badge is white text in a
+    /// white outline: white on the accent passes AA by itself, and a tint
+    /// behind it would only lower that. Everywhere else it is the measured
+    /// text shade over a light tint of the hue. See StatusPalette.
+    static func capsule(_ label: String, tone: StatusTone, onAccent: Bool) -> some View {
+        Text(label)
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(color.opacity(0.18), in: Capsule())
-            .foregroundStyle(color)
+            .foregroundStyle(onAccent ? Color.white : tone.text)
+            .background(onAccent ? Color.clear : tone.fill, in: Capsule())
+            .overlay {
+                if onAccent { Capsule().strokeBorder(Color.white.opacity(0.7), lineWidth: 1) }
+            }
+            .accessibilityLabel("Status: \(label)")
+    }
+}
+
+@available(macOS 14.0, *)
+private struct ProminenceAwareChip: View {
+    let label: String
+    let tone: StatusTone
+    @Environment(\.backgroundProminence) private var prominence
+
+    var body: some View {
+        StatusChip.capsule(label, tone: tone, onAccent: prominence == .increased)
     }
 }
 
@@ -178,5 +199,19 @@ struct EmptyStateView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.3))
+    }
+}
+
+/// The due-date line under an invoice: secondary normally, the measured
+/// overdue shade when it is late. A plain `.orange` here measured 2.2:1 on a
+/// white row and less on a selection.
+private struct DueLineStyle: ViewModifier {
+    let overdue: Bool
+    func body(content: Content) -> some View {
+        if overdue {
+            content.statusForeground(.overdue)
+        } else {
+            content.foregroundStyle(.secondary)
+        }
     }
 }

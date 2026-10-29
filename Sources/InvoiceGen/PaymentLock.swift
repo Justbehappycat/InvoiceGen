@@ -110,7 +110,7 @@ struct LockButton: View {
                     .frame(minWidth: 72, alignment: .leading)
             }
             if let failure = lock.lastFailure, !lock.isUnlocked {
-                Text(failure).font(.caption).foregroundStyle(.orange)
+                Text(failure).font(.caption).foregroundStyle(StatusTone.overdue.text)
             } else {
                 Text(lock.isUnlocked ? unlockedHint : lockedHint)
                     .font(.caption)

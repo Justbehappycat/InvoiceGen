@@ -127,7 +127,7 @@ struct ContractImportView: View {
                         HStack(spacing: 8) {
                             TextField("Deliverable", text: $milestone.deliverable)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            DatePicker("", selection: $milestone.dueDate,
+                            DatePicker("Due date", selection: $milestone.dueDate,
                                        displayedComponents: .date)
                                 .labelsHidden()
                                 .frame(width: 110)

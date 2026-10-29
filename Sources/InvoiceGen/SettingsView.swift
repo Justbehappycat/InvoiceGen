@@ -503,7 +503,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Default currency")
-                    Picker("", selection: business.currencyCode) {
+                    Picker("Default currency", selection: business.currencyCode) {
                         ForEach(Fmt.currencyCodes, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -598,7 +598,7 @@ struct SettingsView: View {
                             if let error = customerSync.lastError {
                                 Label(error, systemImage: "exclamationmark.triangle")
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(StatusTone.overdue.text)
                             } else if let when = customerSync.lastSynced {
                                 Text("Last synced \(when.formatted(date: .omitted, time: .shortened))")
                                     .font(.caption)

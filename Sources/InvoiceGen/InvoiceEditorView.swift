@@ -173,6 +173,9 @@ struct InvoiceEditorView: View {
                 PDFExporter.exportWithPanel(invoice: invoice, customer: customer, business: business)
             } label: {
                 Label("Export PDF", systemImage: "square.and.arrow.down")
+                    // The one toolbar action that finishes the job keeps its
+                    // words; the secondary ones stay icons, as in Mail.
+                    .labelStyle(.titleAndIcon)
             }
             .buttonStyle(.borderedProminent)
             .help("Export this invoice as a PDF (⌘E)")
@@ -337,6 +340,7 @@ struct InvoiceEditorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .accessibilityIdentifier("invoice-editor")
     }
 
     private var customerSection: some View {
@@ -346,7 +350,7 @@ struct InvoiceEditorView: View {
             FormRow(label: "Bill to") {
                 // fixedSize: a menu picker given a wider frame centres itself in
                 // it, which is what pushed the selector away from its label.
-                Picker("", selection: Binding(
+                Picker("Bill to", selection: Binding(
                     get: { invoice.customerID },
                     set: { invoice.customerID = $0 }
                 )) {
@@ -391,7 +395,7 @@ struct InvoiceEditorView: View {
             // Only worth showing once there is a job to file this under.
             if !store.data.projects.isEmpty {
                 FormRow(label: "Project") {
-                    Picker("", selection: $invoice.projectID) {
+                    Picker("Project", selection: $invoice.projectID) {
                         Text("None").tag(UUID?.none)
                         ForEach(store.data.projects.filter { !$0.isArchived }) { project in
                             Text(project.displayName).tag(UUID?.some(project.id))
@@ -511,7 +515,7 @@ struct InvoiceEditorView: View {
     }
 
     private var issueDatePicker: some View {
-        DatePicker("", selection: $invoice.issueDate, displayedComponents: .date)
+        DatePicker("Invoice date", selection: $invoice.issueDate, displayedComponents: .date)
             .labelsHidden()
             .fixedSize()
     }
@@ -527,7 +531,7 @@ struct InvoiceEditorView: View {
     }
 
     private var dueDateField: some View {
-        DatePicker("", selection: $invoice.dueDate, displayedComponents: .date)
+        DatePicker("Payment due", selection: $invoice.dueDate, displayedComponents: .date)
             .labelsHidden()
             .fixedSize()
     }
@@ -537,7 +541,7 @@ struct InvoiceEditorView: View {
     }
 
     private var currencyField: some View {
-        Picker("", selection: $invoice.currencyCode) {
+        Picker("Currency", selection: $invoice.currencyCode) {
             ForEach(Fmt.currencyCodes, id: \.self) { Text($0).tag($0) }
         }
         .labelsHidden()
@@ -570,7 +574,7 @@ struct InvoiceEditorView: View {
             if termBinding.wrappedValue == nil {
                 Text(termDescription)
                     .font(.caption)
-                    .foregroundStyle(termDays.map { $0 < 0 } == true ? .orange : .secondary)
+                    .foregroundStyle(termDays.map { $0 < 0 } == true ? StatusTone.overdue.text : .secondary)
                     .fixedSize()
             }
         }
@@ -730,7 +734,7 @@ struct InvoiceEditorView: View {
             totalsRow("Discount", amount: -invoice.discountAmount) {
                 DecimalField(placeholder: "0", value: $invoice.discountValue, alignment: .trailing)
                     .frame(width: 80)
-                Picker("", selection: $invoice.discountIsPercent) {
+                Picker("Discount type", selection: $invoice.discountIsPercent) {
                     Text(invoice.currencyCode).tag(false)
                     Text("%").tag(true)
                 }
@@ -993,6 +997,7 @@ struct LineItemRow: View {
         .labelStyle(.iconOnly)
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .help("Tidy up, save to the library, or remove this line")
     }
 
     /// The model only ever proposes. Applying is the sheet's job, and undo
@@ -1068,13 +1073,79 @@ private struct TidyReview: View {
 
 // MARK: - Live preview
 
+/// How the live preview sizes the page.
+enum PreviewZoom: Equatable {
+    case fitWidth
+    case fitPage
+    case fixed(Double)
+
+    /// The steps − and + move through, like Preview's.
+    static let steps: [Double] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+    static let range: ClosedRange<Double> = 0.25...3.0
+    /// Room around the page inside the canvas.
+    static let margin: CGFloat = 48
+
+    /// The page's scale for this zoom in a canvas of this size. Pure, so the
+    /// regression suite can pin every mode down without a window.
+    func scale(in canvas: CGSize, page: CGSize) -> CGFloat {
+        let widthFit = (canvas.width - Self.margin) / page.width
+        let heightFit = (canvas.height - Self.margin) / page.height
+        let raw: CGFloat
+        switch self {
+        case .fitWidth: raw = widthFit
+        case .fitPage: raw = min(widthFit, heightFit)
+        case .fixed(let value): raw = CGFloat(value)
+        }
+        return min(CGFloat(Self.range.upperBound), max(0.2, raw))
+    }
+
+    func zoomed(in larger: Bool, from current: CGFloat) -> PreviewZoom {
+        let c = Double(current)
+        let next = larger
+            ? Self.steps.first { $0 > c + 0.001 } ?? Self.range.upperBound
+            : Self.steps.last { $0 < c - 0.001 } ?? Self.range.lowerBound
+        return .fixed(min(Self.range.upperBound, max(Self.range.lowerBound, next)))
+    }
+
+    /// Stored as text so the choice survives relaunches.
+    var storage: String {
+        switch self {
+        case .fitWidth: return "fitWidth"
+        case .fitPage: return "fitPage"
+        case .fixed(let value): return String(format: "%.2f", value)
+        }
+    }
+
+    init(storage: String) {
+        switch storage {
+        case "fitPage": self = .fitPage
+        case "fitWidth": self = .fitWidth
+        default:
+            if let value = Double(storage), PreviewZoom.range.contains(value) {
+                self = .fixed(value)
+            } else {
+                self = .fitWidth
+            }
+        }
+    }
+}
+
 struct DocumentPreview: View {
     let invoice: Invoice
     let customer: Customer?
     let business: BusinessProfile
 
-    @State private var availableWidth: CGFloat = 300
+    @State private var canvas = CGSize(width: 300, height: 600)
     @State private var specs: [InvoicePageSpec] = []
+    @AppStorage("previewZoom") private var zoomStorage = PreviewZoom.fitWidth.storage
+
+    private var zoom: PreviewZoom {
+        get { PreviewZoom(storage: zoomStorage) }
+        nonmutating set { zoomStorage = newValue.storage }
+    }
+
+    private static let page = CGSize(width: InvoiceDocumentView.pageWidth,
+                                     height: InvoiceDocumentView.pageHeight)
 
     private struct PaginationKey: Equatable {
         let invoice: Invoice
@@ -1083,12 +1154,12 @@ struct DocumentPreview: View {
     }
 
     var body: some View {
-        // Width comes from a background reader rather than a GeometryReader
+        // Size comes from a background reader rather than a GeometryReader
         // wrapper, so the ScrollView keeps its toolbar safe-area inset.
-        let scale = min(1.0, max(0.28, (availableWidth - 48) / InvoiceDocumentView.pageWidth))
+        let scale = zoom.scale(in: canvas, page: Self.page)
         let specs = self.specs.isEmpty ? [.whole(itemCount: invoice.items.count)] : self.specs
 
-        ScrollView {
+        ScrollView([.vertical, .horizontal]) {
             VStack(spacing: 20) {
                 ForEach(Array(specs.enumerated()), id: \.element.id) { index, spec in
                     VStack(spacing: 4) {
@@ -1125,18 +1196,31 @@ struct DocumentPreview: View {
                     }
                 }
             }
-            .padding(.vertical, 24)
-            .frame(maxWidth: .infinity)
+            .padding(.top, 24)
+            // Room under the last page for the zoom control, so it never
+            // sits permanently over the totals.
+            .padding(.bottom, 64)
+            .padding(.horizontal, 24)
+            .frame(minWidth: canvas.width, alignment: .top)
         }
+        .scrollIndicators(.automatic)
         .background(
             GeometryReader { geo in
                 Color(nsColor: .underPageBackgroundColor)
-                    .preference(key: PreviewWidthKey.self, value: geo.size.width)
+                    .preference(key: PreviewSizeKey.self, value: geo.size)
             }
         )
-        .onPreferenceChange(PreviewWidthKey.self) { width in
-            if width > 0, abs(width - availableWidth) > 0.5 { availableWidth = width }
+        .onPreferenceChange(PreviewSizeKey.self) { size in
+            if size.width > 0,
+               abs(size.width - canvas.width) > 0.5 || abs(size.height - canvas.height) > 0.5 {
+                canvas = size
+            }
         }
+        .overlay(alignment: .bottomTrailing) {
+            zoomControl(current: scale)
+                .padding(12)
+        }
+        .accessibilityIdentifier("invoice-preview")
         // Repaginate off the body path, and only once typing settles.
         .task(id: PaginationKey(invoice: invoice, customer: customer, business: business)) {
             if !self.specs.isEmpty {
@@ -1148,11 +1232,71 @@ struct DocumentPreview: View {
             )
         }
     }
+
+    /// A small floating capsule, like Preview's: two fit modes, then zoom.
+    /// It overlays the canvas instead of taking a row from it.
+    private func zoomControl(current scale: CGFloat) -> some View {
+        HStack(spacing: 2) {
+            zoomButton("Fit page", icon: "rectangle.portrait",
+                       help: "Fit the whole page in the preview",
+                       selected: zoom == .fitPage) { zoom = .fitPage }
+            zoomButton("Fit width", icon: "arrow.left.and.right",
+                       help: "Fit the page to the preview's width",
+                       selected: zoom == .fitWidth) { zoom = .fitWidth }
+
+            Divider().frame(height: 14).padding(.horizontal, 3)
+
+            zoomButton("Zoom out", icon: "minus", help: "Zoom out (⌘−)", selected: false) {
+                zoom = zoom.zoomed(in: false, from: scale)
+            }
+            .keyboardShortcut("-", modifiers: .command)
+
+            Button {
+                zoom = .fixed(1.0)
+            } label: {
+                Text("\(Int((scale * 100).rounded()))%")
+                    .monospacedDigit()
+                    .frame(minWidth: 38)
+            }
+            .buttonStyle(.borderless)
+            .help("Actual size (⌘0)")
+            .accessibilityLabel("Zoom level")
+            .accessibilityValue("\(Int((scale * 100).rounded())) percent")
+            .accessibilityHint("Sets the preview to actual size")
+            .keyboardShortcut("0", modifiers: .command)
+
+            zoomButton("Zoom in", icon: "plus", help: "Zoom in (⌘+)", selected: false) {
+                zoom = zoom.zoomed(in: true, from: scale)
+            }
+            .keyboardShortcut("=", modifiers: .command)
+        }
+        .font(.callout)
+        .controlSize(.small)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .liquidGlass(in: Capsule())
+    }
+
+    private func zoomButton(_ label: String, icon: String, help: String, selected: Bool,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: icon)
+                .labelStyle(.iconOnly)
+                .frame(width: 22, height: 18)
+                .foregroundStyle(selected ? Color.accentColor : Color.primary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .help(help)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
 }
 
-private struct PreviewWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+private struct PreviewSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        value = CGSize(width: max(value.width, next.width), height: max(value.height, next.height))
     }
 }

@@ -109,6 +109,9 @@ struct ProjectDetailView: View {
                             Text(customer.displayName).tag(UUID?.some(customer.id))
                         }
                     }
+                    // The visible "Client" is a separate text node, so the
+                    // pop-up itself was announced with no name at all.
+                    .accessibilityLabel("Client")
                     Button {
                         let new = store.newCustomer(name: "New customer")
                         project.customerID = new.id
@@ -149,9 +152,11 @@ struct ProjectDetailView: View {
                         figure("Contracted", project.contractTotal, tint: .secondary)
                     }
                     figure("Invoiced", totals.invoiced, tint: .secondary)
-                    figure("Paid", totals.paid, tint: totals.paid > 0 ? .green : .secondary)
+                    // Measured status shades, not raw .green/.orange: those
+                    // were about 2:1 against the window background.
+                    figure("Paid", totals.paid, tint: totals.paid > 0 ? StatusTone.paid.text : .secondary)
                     figure("Outstanding", totals.outstanding,
-                           tint: totals.outstanding > 0 ? .orange : .secondary)
+                           tint: totals.outstanding > 0 ? StatusTone.overdue.text : .secondary)
                 }
 
                 if let left = totals.remainingToBill(contractTotal: project.contractTotal) {
@@ -287,7 +292,7 @@ struct ProjectDetailView: View {
                                 Text("#\(invoice.number)").font(.body.weight(.medium))
                                 Text(Fmt.shortDate(invoice.dueDate))
                                     .font(.caption)
-                                    .foregroundStyle(invoice.isOverdue ? .orange : .secondary)
+                                    .foregroundStyle(invoice.isOverdue ? StatusTone.overdue.text : .secondary)
                                 Spacer()
                                 Text(Fmt.currency(invoice.total, code: invoice.currencyCode))
                                 StatusChip(status: invoice.status, overdue: invoice.isOverdue)
@@ -332,7 +337,7 @@ private struct MilestoneRow: View {
             TextField("Deliverable, e.g. Episode 1", text: $milestone.deliverable)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            DatePicker("", selection: $milestone.dueDate, displayedComponents: .date)
+            DatePicker("Due date", selection: $milestone.dueDate, displayedComponents: .date)
                 .labelsHidden()
                 .frame(width: 110, alignment: .leading)
 

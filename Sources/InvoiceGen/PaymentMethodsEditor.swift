@@ -98,7 +98,7 @@ private struct PaymentMethodRow: View {
                 .help("Use your own logo image for this method")
                 .accessibilityLabel("Choose a logo image for \(method.displayTitle)")
 
-                Picker("", selection: Binding(
+                Picker("Payment method type", selection: Binding(
                     get: { method.kind },
                     set: { newKind in
                         let wasDefaultTitle = method.title.isEmpty || method.title == method.kind.label
@@ -116,7 +116,7 @@ private struct PaymentMethodRow: View {
                 TextField("Label shown on the invoice", text: $method.title)
 
                 if method.kind == .bank || method.kind == .wire {
-                    Picker("", selection: Binding(
+                    Picker("Bank", selection: Binding(
                         get: { method.bankPresetID ?? "" },
                         set: { newValue in
                             method.bankPresetID = newValue.isEmpty ? nil : newValue
