@@ -44,6 +44,11 @@ struct InvoiceGenApp: App {
             let height = args.count > index + 3 ? Double(args[index + 3]) ?? 860 : 860
             let screen = args.count > index + 4 ? args[index + 4] : "invoices"
             MainActor.assumeIsolated {
+                // The vault opens on a background queue, so without this the
+                // capture races it and the shot shows "No payment methods yet"
+                // on an invoice that has them -- a screenshot that lies about
+                // the app's state. Every other data path already waits.
+                waitForSecrets(AppStore.shared)
                 UIShot.capture(path: args[index + 1], width: width, height: height, screen: screen)
             }
             exit(0)
