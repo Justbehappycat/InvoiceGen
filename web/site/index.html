@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InvoiceGen — offline invoicing for macOS</title>
+<meta name="description" content="A small, fast, entirely offline invoicing app for macOS. Signed PDF invoices with a built-in verification mark. Free and open source.">
+<link rel="icon" href="assets/icon.png">
+<meta property="og:title" content="InvoiceGen — offline invoicing for macOS">
+<meta property="og:description" content="Invoices that never leave your Mac. Free and open source.">
+<meta property="og:image" content="assets/icon.png">
+<style>
+:root{
+  --ink:#16181c; --muted:#5d636e; --faint:#8b919c;
+  --line:#e3e5e9; --bg:#ffffff; --panel:#f6f7f9;
+  --accent:#2f6df6; --accent-ink:#ffffff;
+  --radius:14px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --ink:#e9ecf1; --muted:#a3abb8; --faint:#79818f;
+         --line:#272b33; --bg:#0f1115; --panel:#161920; --accent:#5b8dff; }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:980px; margin:0 auto; padding:0 24px}
+
+/* nav */
+nav{border-bottom:1px solid var(--line); position:sticky; top:0; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:saturate(180%) blur(14px); z-index:10}
+nav .wrap{display:flex; align-items:center; gap:22px; height:56px}
+nav img{width:24px; height:24px; border-radius:5px}
+nav .name{font-weight:620; letter-spacing:-.01em; color:var(--ink)}
+nav .spacer{flex:1}
+nav a.lnk{color:var(--muted); font-size:14.5px}
+nav a.lnk:hover{color:var(--ink); text-decoration:none}
+
+/* hero */
+header{padding:72px 0 8px; text-align:center}
+header img.app{width:116px; height:116px; margin-bottom:22px;
+  filter:drop-shadow(0 14px 28px rgba(0,0,0,.16))}
+h1{font-size:46px; line-height:1.1; letter-spacing:-.025em; margin:0 0 14px; font-weight:680}
+.tagline{font-size:20px; color:var(--muted); margin:0 auto 30px; max-width:600px}
+.cta{display:inline-flex; align-items:center; gap:9px; background:var(--accent); color:var(--accent-ink);
+  padding:13px 26px; border-radius:11px; font-weight:600; font-size:16.5px}
+.cta:hover{text-decoration:none; filter:brightness(1.07)}
+.meta{margin-top:13px; font-size:13.5px; color:var(--faint)}
+.meta code{font-family:var(--mono); font-size:12.5px}
+.reassure{margin-top:7px; font-size:13.5px; color:var(--faint)}
+
+/* shot */
+.shot{margin:46px 0 0}
+.shot img{width:100%; border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:0 22px 60px rgba(0,0,0,.13); display:block}
+.caption{text-align:center; font-size:13px; color:var(--faint); margin-top:11px}
+
+section{padding:62px 0; border-top:1px solid var(--line); margin-top:62px}
+h2{font-size:26px; letter-spacing:-.018em; margin:0 0 10px; font-weight:650}
+.lede{color:var(--muted); margin:0 0 30px; max-width:680px}
+
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(255px,1fr)); gap:22px}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px 20px 21px}
+.card h3{margin:0 0 7px; font-size:16px; font-weight:620}
+.card p{margin:0; color:var(--muted); font-size:14.5px; line-height:1.6}
+
+.note{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px 24px}
+.note p{margin:0 0 12px} .note p:last-child{margin:0}
+.note code{font-family:var(--mono); font-size:13px; background:var(--bg); border:1px solid var(--line);
+  padding:1.5px 5px; border-radius:5px}
+
+footer{border-top:1px solid var(--line); margin-top:62px; padding:34px 0 60px;
+  font-size:13.5px; color:var(--faint)}
+footer .wrap{display:flex; flex-wrap:wrap; gap:8px 20px; align-items:center}
+footer .spacer{flex:1}
+
+@media (max-width:640px){
+  header{padding-top:52px}
+  h1{font-size:34px} .tagline{font-size:17.5px}
+  section{padding:46px 0; margin-top:46px}
+  nav .hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <img src="assets/icon.png" alt="">
+  <span class="name">InvoiceGen</span>
+  <span class="spacer"></span>
+  <a class="lnk hide-sm" href="#features">Features</a>
+  <a class="lnk hide-sm" href="#verification">Verification</a>
+  <a class="lnk" href="https://github.com/Justbehappycat/InvoiceGen">Source</a>
+  <a class="lnk" href="#download">Download</a>
+</div></nav>
+
+<header><div class="wrap">
+  <img class="app" src="assets/icon.png" alt="InvoiceGen icon">
+  <h1>Invoicing that stays on your Mac</h1>
+  <p class="tagline">
+    InvoiceGen writes, prints and tracks invoices entirely offline. No account,
+    no subscription, no server holding your clients and your bank details.
+  </p>
+  <a class="cta" id="download" href="https://github.com/Justbehappycat/InvoiceGen/releases/latest/download/InvoiceGen-0.15.0.zip">
+    Download for macOS
+  </a>
+  <div class="meta">Version 0.15.0 · 1.5&nbsp;MB · macOS 13 or later · Apple silicon &amp; Intel</div>
+  <div class="reassure">Signed and notarized by Apple. Free and open source.</div>
+</div></header>
+
+<div class="wrap shot">
+  <img src="assets/screenshot-invoices.png" alt="The InvoiceGen window: invoice list, editor and live preview side by side">
+  <p class="caption">Edit on the left, the finished page on the right — updating as you type.</p>
+</div>
+
+<section id="features"><div class="wrap">
+  <h2>What it does</h2>
+  <p class="lede">Enough to run a freelance practice, and deliberately nothing more.</p>
+  <div class="grid">
+    <div class="card"><h3>Properly offline</h3>
+      <p>No network calls while you work. Your invoices, clients and payment details are files on your disk, not rows in someone else's database.</p></div>
+    <div class="card"><h3>Real PDFs</h3>
+      <p>Vector output at US Letter, paginated the way a printer expects. Export, print, or hand the file straight to a client.</p></div>
+    <div class="card"><h3>Encrypted payment details</h3>
+      <p>Account and routing numbers live in an AES-GCM vault keyed to your Mac's Keychain, masked until you authenticate, with every change logged.</p></div>
+    <div class="card"><h3>Bulk editing</h3>
+      <p>Select many invoices and set status, archive, duplicate or trash them at once — as a single step you can undo in one go.</p></div>
+    <div class="card"><h3>Archive and trash</h3>
+      <p>Finished work moves out of the way by year. Deleting is reversible until you empty the trash, so a mis-click costs nothing.</p></div>
+    <div class="card"><h3>Clients in iCloud, optionally</h3>
+      <p>Share your customer list across your Macs through iCloud Drive. Invoices and payment details stay local by design.</p></div>
+  </div>
+</div></section>
+
+<section id="verification"><div class="wrap">
+  <h2>Every invoice can prove it wasn't edited</h2>
+  <p class="lede">
+    An invoice is a financial document, and a PDF is trivially editable. InvoiceGen prints a
+    verification mark into the design itself.
+  </p>
+  <div class="note">
+    <p>
+      The mark is an HMAC-SHA256 signature over four fields — invoice number, date, total quantity
+      and total amount — keyed by a passphrase only you know. It reads as part of the banner
+      rather than as a barcode bolted onto the page.
+    </p>
+    <p>
+      Open a PDF in <strong>Verify Invoice…</strong> and the app reads the page's own printed numbers,
+      recomputes the signature and says whether they still agree. Change the total in a PDF editor
+      and the check fails — the signature no longer matches the figure on the page.
+    </p>
+    <p>
+      The key never leaves your Mac, so nobody else can mint a valid mark — including us, because
+      there is no us.
+    </p>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Open source, and checkable</h2>
+  <p class="lede">
+    The whole app is a few thousand lines of Swift you can read in an afternoon.
+  </p>
+  <div class="note">
+    <p>
+      Builds are signed with a Developer ID and notarized by Apple, so macOS opens them without
+      complaint. Updates arrive in the app itself and are refused unless signed by the same
+      identity — the check is derived from the running app's own signature, so it cannot drift.
+    </p>
+    <p>
+      Source, releases and the full history: <a href="https://github.com/Justbehappycat/InvoiceGen">github.com/Justbehappycat/InvoiceGen</a>
+    </p>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>InvoiceGen</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/Justbehappycat/InvoiceGen">Source</a>
+  <a href="https://github.com/Justbehappycat/InvoiceGen/releases">Releases</a>
+  <a href="https://github.com/Justbehappycat/InvoiceGen/issues">Issues</a>
+  <span>© 2026 Finecut Studio LLC</span>
+</div></footer>
+
+</body>
+</html>
