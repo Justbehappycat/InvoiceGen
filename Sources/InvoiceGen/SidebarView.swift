@@ -320,7 +320,7 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            Divider()
+            BarDivider()
         }
         .liquidGlassBar()
     }
@@ -349,7 +349,7 @@ struct SidebarView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .liquidGlassBar()
-        .overlay(alignment: .top) { Divider() }
+        .overlay(alignment: .top) { BarDivider() }
     }
 
     private var filteredCustomers: [Customer] {
@@ -399,7 +399,7 @@ struct SidebarView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                Divider()
+                BarDivider()
             }
             .liquidGlassBar()
         }

@@ -74,3 +74,16 @@ enum LiquidGlass {
         return false
     }
 }
+
+
+/// A hairline only where there is no glass to do the separating.
+///
+/// Liquid Glass distinguishes a bar from the content behind it by material and
+/// refraction, so a 1px rule drawn on top of it reads as a doubled edge -- the
+/// pre-glass idiom showing through. Below macOS 26 the material fallback still
+/// wants the line.
+struct BarDivider: View {
+    var body: some View {
+        if !LiquidGlass.isAvailable { Divider() }
+    }
+}
