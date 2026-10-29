@@ -17,6 +17,9 @@ struct InvoiceEditorView: View {
     @State private var publishError: String?
     @State private var justCopiedLink = false
     @State private var templateName = ""
+    /// Payment details change once and then sit there, so the section opens
+    /// collapsed. The choice sticks across invoices and relaunches.
+    @AppStorage("showPaymentDetail") private var showPaymentDetail = false
 
     private var customer: Customer? { store.customer(id: invoice.customerID) }
     private var business: BusinessProfile { store.data.business }
@@ -77,13 +80,17 @@ struct InvoiceEditorView: View {
         HStack(spacing: 8) {
             Image(systemName: icon).foregroundStyle(tint)
                 .accessibilityHidden(true)
-            Text(text).font(.callout)
+            Text(text).font(.callout).foregroundStyle(.primary)
             Spacer()
             Button(action, action: perform).controlSize(.small)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(tint.opacity(0.10))
+        // A tint this faint reads on white but disappears on a dark window, so
+        // the strip carries its own hairline rather than relying on the wash
+        // alone to separate it from the bar below.
+        .background(tint.opacity(0.14))
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var actionBar: some View {
@@ -134,7 +141,8 @@ struct InvoiceEditorView: View {
                 )
             }
             .keyboardShortcut("p", modifiers: [.command, .shift])
-            .help("Show or hide the live preview (⇧⌘P)")
+            .labelStyle(.iconOnly)
+            .help(showPreview ? "Hide the live preview (⇧⌘P)" : "Show the live preview (⇧⌘P)")
 
             shareMenu
 
@@ -143,6 +151,8 @@ struct InvoiceEditorView: View {
             } label: {
                 Label("Print", systemImage: "printer")
             }
+            .labelStyle(.iconOnly)
+            .help("Print this invoice (⌘P)")
 
             Button {
                 PDFExporter.exportWithPanel(invoice: invoice, customer: customer, business: business)
@@ -285,148 +295,234 @@ struct InvoiceEditorView: View {
 
     private var form: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: Metrics.sectionGap) {
                 customerSection
+                SectionRule()
                 detailsSection
+                SectionRule()
                 itemsSection
+                SectionRule()
                 totalsSection
+                SectionRule()
                 paymentsSection
+                SectionRule()
                 notesSection
                 dangerSection
             }
-            .padding(20)
+            .padding(.horizontal, Metrics.gutter)
+            .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(.headline)
-    }
-
     private var customerSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Picker("Bill to", selection: Binding(
-                        get: { invoice.customerID },
-                        set: { invoice.customerID = $0 }
-                    )) {
-                        Text("No customer").tag(UUID?.none)
-                        ForEach(store.data.customers) { customer in
-                            Text(customer.displayName).tag(UUID?.some(customer.id))
-                        }
-                    }
-                    Button {
-                        let new = store.newCustomer(name: "New customer")
-                        invoice.customerID = new.id
-                        focus.customerID = new.id
-                        focus.requestedSection = .customers
-                    } label: {
-                        Label("New customer", systemImage: "person.badge.plus")
-                    }
-                    .labelStyle(.iconOnly)
-                    .help("Create a new customer and edit their details")
-                }
+        VStack(alignment: .leading, spacing: Metrics.rowGap) {
+            SectionHeader("Customer")
 
-                if let customer {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(customer.addressLines.enumerated()), id: \.offset) { _, line in
-                            Text(line).font(.caption).foregroundStyle(.secondary)
-                        }
-                        if !customer.email.isEmpty {
-                            Text(customer.email).font(.caption).foregroundStyle(.secondary)
-                        }
+            FormRow(label: "Bill to") {
+                Picker("", selection: Binding(
+                    get: { invoice.customerID },
+                    set: { invoice.customerID = $0 }
+                )) {
+                    Text("No customer").tag(UUID?.none)
+                    ForEach(store.data.customers) { customer in
+                        Text(customer.displayName).tag(UUID?.some(customer.id))
                     }
                 }
+                .labelsHidden()
+                .frame(maxWidth: 260)
 
-                // Only worth showing once there is a job to file this under.
-                if !store.data.projects.isEmpty {
-                    HStack {
-                        Picker("Project", selection: $invoice.projectID) {
-                            Text("None").tag(UUID?.none)
-                            ForEach(store.data.projects.filter { !$0.isArchived }) { project in
-                                Text(project.displayName).tag(UUID?.some(project.id))
-                            }
+                Button {
+                    let new = store.newCustomer(name: "New customer")
+                    invoice.customerID = new.id
+                    focus.customerID = new.id
+                    focus.requestedSection = .customers
+                } label: {
+                    Label("New customer", systemImage: "person.badge.plus")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .help("Create a new customer and edit their details")
+            }
+
+            // The address sits under the picker in the same column the fields
+            // start in, so it reads as the customer's detail rather than a
+            // floating caption.
+            if let customer {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(customer.addressLines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                    }
+                    if !customer.email.isEmpty { Text(customer.email) }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, Metrics.labelWidth + 10)
+            }
+
+            // Only worth showing once there is a job to file this under.
+            if !store.data.projects.isEmpty {
+                FormRow(label: "Project") {
+                    Picker("", selection: $invoice.projectID) {
+                        Text("None").tag(UUID?.none)
+                        ForEach(store.data.projects.filter { !$0.isArchived }) { project in
+                            Text(project.displayName).tag(UUID?.some(project.id))
                         }
-                        if let id = invoice.projectID, store.project(id: id) != nil {
-                            Button {
-                                focus.projectID = id
-                                focus.requestedSection = .projects
-                            } label: {
-                                Label("Open project", systemImage: "arrow.up.forward.square")
-                            }
-                            .labelStyle(.iconOnly)
-                            .help("Open the job this invoice belongs to")
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 260)
+
+                    if let id = invoice.projectID, store.project(id: id) != nil {
+                        Button {
+                            focus.projectID = id
+                            focus.requestedSection = .projects
+                        } label: {
+                            Label("Open project", systemImage: "arrow.up.forward.square")
                         }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .help("Open the job this invoice belongs to")
                     }
                 }
             }
-            .padding(6)
-        } label: {
-            sectionTitle("Customer")
         }
     }
 
     private var detailsSection: some View {
-        GroupBox {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-                GridRow {
-                    Text("Invoice number")
-                    TextField("", text: $invoice.number).frame(width: 120)
-                    Text("P.O./S.O.")
-                    TextField("", text: $invoice.poNumber).frame(width: 120)
-                }
-                GridRow {
-                    Text("Invoice date")
-                    HStack(spacing: 6) {
-                        DatePicker("", selection: $invoice.issueDate, displayedComponents: .date)
-                            .labelsHidden()
-                        Button("Today") { setIssueDateToToday() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(Calendar.current.isDateInToday(invoice.issueDate))
-                            .help("Set the invoice date to today, keeping the same payment term")
+        VStack(alignment: .leading, spacing: Metrics.rowGap) {
+            SectionHeader("Details")
+
+            // Two label/field pairs per row while there is room, falling to one
+            // when the pane is narrow -- a date field that has been squeezed
+            // until its stepper is clipped is worse than a taller form.
+            ViewThatFits(in: .horizontal) {
+                Grid(alignment: .leadingFirstTextBaseline,
+                     horizontalSpacing: 10, verticalSpacing: Metrics.rowGap) {
+                    GridRow {
+                        detailLabel("Invoice number"); invoiceNumberField
+                        detailLabel("P.O./S.O.");      poField
                     }
-                    Text("Payment due")
-                    DatePicker("", selection: $invoice.dueDate, displayedComponents: .date)
-                        .labelsHidden()
-                }
-                GridRow {
-                    Text("Title")
-                    TextField("INVOICE", text: $invoice.title).frame(width: 120)
-                    Text("Currency")
-                    Picker("", selection: $invoice.currencyCode) {
-                        ForEach(Fmt.currencyCodes, id: \.self) { Text($0).tag($0) }
+                    GridRow {
+                        detailLabel("Invoice date");   issueDateField
+                        detailLabel("Payment due");    dueDateField
                     }
-                    .labelsHidden()
-                    .frame(width: 120)
-                }
-                GridRow {
-                    Text("Terms")
-                    HStack(spacing: 6) {
-                        ForEach([7, 14, 30, 60], id: \.self) { days in
-                            Button("\(days)d") {
-                                invoice.dueDate = Calendar.current.date(
-                                    byAdding: .day, value: days, to: invoice.issueDate
-                                ) ?? invoice.dueDate
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
+                    GridRow {
+                        detailLabel("Title");          titleField
+                        detailLabel("Currency");       currencyField
                     }
-                    .gridCellColumns(3)
+                    GridRow {
+                        detailLabel("Terms")
+                        termsButtons.gridCellColumns(3)
+                    }
+                }
+
+                Grid(alignment: .leadingFirstTextBaseline,
+                     horizontalSpacing: 10, verticalSpacing: Metrics.rowGap) {
+                    GridRow { detailLabel("Invoice number"); invoiceNumberField }
+                    GridRow { detailLabel("P.O./S.O.");      poField }
+                    GridRow { detailLabel("Invoice date");   issueDateField }
+                    GridRow { detailLabel("Payment due");    dueDateField }
+                    GridRow { detailLabel("Title");          titleField }
+                    GridRow { detailLabel("Currency");       currencyField }
+                    GridRow { detailLabel("Terms");          termsButtons }
                 }
             }
-            .padding(6)
-        } label: {
-            sectionTitle("Details")
+        }
+    }
+
+    private func detailLabel(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .frame(width: Metrics.labelWidth, alignment: .leading)
+            .gridColumnAlignment(.leading)
+    }
+
+    private var invoiceNumberField: some View {
+        TextField("", text: $invoice.number)
+            .monospacedDigit()
+            .frame(width: Metrics.fieldWidth)
+    }
+
+    private var poField: some View {
+        TextField("", text: $invoice.poNumber).frame(width: Metrics.fieldWidth)
+    }
+
+    private var issueDateField: some View {
+        HStack(spacing: 6) {
+            DatePicker("", selection: $invoice.issueDate, displayedComponents: .date)
+                .labelsHidden()
+            // fixedSize stops the grid squeezing this to "Tod...".
+            Button("Today") { setIssueDateToToday() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .fixedSize()
+                .disabled(Calendar.current.isDateInToday(invoice.issueDate))
+                .help("Set the invoice date to today, keeping the same payment term")
+        }
+    }
+
+    private var dueDateField: some View {
+        DatePicker("", selection: $invoice.dueDate, displayedComponents: .date)
+            .labelsHidden()
+    }
+
+    private var titleField: some View {
+        TextField("INVOICE", text: $invoice.title).frame(width: Metrics.fieldWidth)
+    }
+
+    private var currencyField: some View {
+        Picker("", selection: $invoice.currencyCode) {
+            ForEach(Fmt.currencyCodes, id: \.self) { Text($0).tag($0) }
+        }
+        .labelsHidden()
+        .frame(width: Metrics.fieldWidth)
+    }
+
+    private var termsButtons: some View {
+        HStack(spacing: 6) {
+            ForEach([7, 14, 30, 60], id: \.self) { days in
+                Button("\(days)d") {
+                    invoice.dueDate = Calendar.current.date(
+                        byAdding: .day, value: days, to: invoice.issueDate
+                    ) ?? invoice.dueDate
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Due \(days) days after the invoice date")
+            }
+            Spacer(minLength: 0)
         }
     }
 
     private var itemsSection: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: Metrics.rowGap) {
+            SectionHeader(title: "Items") {
+                Button {
+                    isEditingColumns = true
+                } label: {
+                    Label("Columns", systemImage: "tablecells")
+                }
+                .buttonStyle(.borderless)
+                .help("Rename the columns, or keep one off the printed invoice")
+                .popover(isPresented: $isEditingColumns, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ColumnSettingsEditor(columns: $invoice.columns)
+                        HStack {
+                            Button("Use business defaults") {
+                                invoice.columns = store.data.business.defaultColumns
+                            }
+                            Spacer()
+                            Button("Save as defaults") {
+                                store.data.business.defaultColumns = invoice.columns
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(16)
+                    .frame(width: 420)
+                }
+            }
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 0) {
                     columnHeader(invoice.columns.itemHeading, printed: true)
@@ -484,37 +580,6 @@ struct InvoiceEditorView: View {
                     Spacer()
                 }
             }
-            .padding(6)
-        } label: {
-            HStack {
-                sectionTitle("Items")
-                Spacer()
-                Button {
-                    isEditingColumns = true
-                } label: {
-                    Label("Columns", systemImage: "tablecells")
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .help("Rename the columns, or keep one off the printed invoice")
-                .popover(isPresented: $isEditingColumns, arrowEdge: .bottom) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ColumnSettingsEditor(columns: $invoice.columns)
-                        HStack {
-                            Button("Use business defaults") {
-                                invoice.columns = store.data.business.defaultColumns
-                            }
-                            Spacer()
-                            Button("Save as defaults") {
-                                store.data.business.defaultColumns = invoice.columns
-                            }
-                        }
-                        .controlSize(.small)
-                    }
-                    .padding(16)
-                    .frame(width: 420)
-                }
-            }
         }
     }
 
@@ -533,75 +598,93 @@ struct InvoiceEditorView: View {
     }
 
     private var totalsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Text("Discount").frame(width: 90, alignment: .leading)
-                    DecimalField(placeholder: "0", value: $invoice.discountValue)
-                        .frame(width: 90)
-                    Picker("", selection: $invoice.discountIsPercent) {
-                        Text(invoice.currencyCode).tag(false)
-                        Text("%").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 110)
-                    Spacer()
-                    Text("-" + Fmt.currency(invoice.discountAmount, code: invoice.currencyCode))
-                        .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: Metrics.rowGap) {
+            SectionHeader("Totals")
 
-                HStack(spacing: 8) {
-                    Text("Tax").frame(width: 90, alignment: .leading)
-                    TextField("Tax", text: $invoice.taxLabel).frame(width: 90)
-                    DecimalField(placeholder: "0", value: $invoice.taxRate).frame(width: 70)
-                    Text("%").foregroundStyle(.secondary)
-                    Spacer()
-                    Text(Fmt.currency(invoice.taxAmount, code: invoice.currencyCode))
-                        .foregroundStyle(.secondary)
+            // Every row here -- the editable ones and the sums -- is the same
+            // shape: label column, controls, then the amount hard against the
+            // right edge. That is what makes one column of figures instead of
+            // two that nearly line up.
+            totalsRow("Discount", amount: -invoice.discountAmount) {
+                DecimalField(placeholder: "0", value: $invoice.discountValue, alignment: .trailing)
+                    .frame(width: 80)
+                Picker("", selection: $invoice.discountIsPercent) {
+                    Text(invoice.currencyCode).tag(false)
+                    Text("%").tag(true)
                 }
-
-                HStack(spacing: 8) {
-                    Text("Amount paid").frame(width: 90, alignment: .leading)
-                    DecimalField(placeholder: "0", value: $invoice.amountPaid).frame(width: 90)
-                    Button("Mark fully paid") {
-                        invoice.amountPaid = invoice.total
-                        invoice.status = .paid
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    Spacer()
-                }
-
-                Divider()
-
-                HStack {
-                    Text("Total").font(.callout)
-                    Spacer()
-                    Text(Fmt.currency(invoice.total, code: invoice.currencyCode))
-                        .font(.callout)
-                }
-                HStack {
-                    Text("Amount due").font(.title3.weight(.semibold))
-                    Spacer()
-                    Text(Fmt.currency(invoice.amountDue, code: invoice.currencyCode))
-                        .font(.title3.weight(.semibold))
-                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
-            .padding(6)
-        } label: {
-            sectionTitle("Totals")
+
+            totalsRow("Tax", amount: invoice.taxAmount) {
+                TextField("Tax", text: $invoice.taxLabel).frame(width: 80)
+                DecimalField(placeholder: "0", value: $invoice.taxRate, alignment: .trailing)
+                    .frame(width: 56)
+                Text("%").foregroundStyle(.secondary)
+            }
+
+            totalsRow("Amount paid", amount: invoice.amountPaid) {
+                DecimalField(placeholder: "0", value: $invoice.amountPaid, alignment: .trailing)
+                    .frame(width: 80)
+                Button("Mark fully paid") {
+                    invoice.amountPaid = invoice.total
+                    invoice.status = .paid
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .fixedSize()
+                .disabled(invoice.amountPaid == invoice.total)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Divider().padding(.vertical, 2)
+                summaryRow("Subtotal", invoice.subtotal, tint: .secondary)
+                summaryRow("Total", invoice.total, tint: .primary)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("Amount due")
+                        .font(.system(size: 16, weight: .semibold))
+                    Spacer(minLength: 8)
+                    Money(amount: invoice.amountDue, code: invoice.currencyCode,
+                          font: .system(size: 16), weight: .semibold)
+                        .frame(width: Metrics.amountWidth, alignment: .trailing)
+                }
+                .padding(.top, 2)
+            }
+            .padding(.leading, Metrics.labelWidth + 10)
+        }
+    }
+
+    private func totalsRow<Controls: View>(
+        _ label: String,
+        amount: Decimal,
+        @ViewBuilder controls: () -> Controls
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .frame(width: Metrics.labelWidth, alignment: .leading)
+                .foregroundStyle(.secondary)
+            controls()
+            Spacer(minLength: 8)
+            Money(amount: amount, code: invoice.currencyCode, tint: .secondary)
+                .frame(width: Metrics.amountWidth, alignment: .trailing)
+        }
+    }
+
+    private func summaryRow(_ label: String, _ value: Decimal,
+                            tint: HierarchicalShapeStyle) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label).foregroundStyle(tint)
+            Spacer(minLength: 8)
+            Money(amount: value, code: invoice.currencyCode, tint: tint)
+                .frame(width: Metrics.amountWidth, alignment: .trailing)
         }
     }
 
     private var paymentsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Shown on the invoice under “How to Pay”.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+        VStack(alignment: .leading, spacing: Metrics.rowGap) {
+            SectionHeader(title: "Payment") {
+                HStack(spacing: 8) {
                     Button("Use defaults") {
                         invoice.paymentMethods = business.paymentMethods.map { method in
                             var copy = method
@@ -610,38 +693,82 @@ struct InvoiceEditorView: View {
                         }
                     }
                     .buttonStyle(.borderless)
-                    .controlSize(.small)
                     .disabled(business.paymentMethods.isEmpty || !paymentLock.isUnlocked)
+
+                    Button(showPaymentDetail ? "Hide" : "Show") {
+                        showPaymentDetail.toggle()
+                    }
+                    .buttonStyle(.borderless)
                 }
-                PaymentMethodsEditor(methods: $invoice.paymentMethods)
             }
-            .padding(6)
-        } label: {
-            sectionTitle("Payment")
+
+            if showPaymentDetail {
+                Text("Shown on the invoice under “How to Pay”.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                PaymentMethodsEditor(methods: $invoice.paymentMethods)
+            } else {
+                paymentSummary
+            }
+        }
+    }
+
+    /// Collapsed, this is a status line, not a second editor. The values it
+    /// shows come from `PaymentLock.mask` exactly as the expanded editor's do,
+    /// so collapsing can never reveal something unlocking would not.
+    private var paymentSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if invoice.enabledPaymentMethods.isEmpty {
+                Text("No payment methods on this invoice.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(invoice.enabledPaymentMethods) { method in
+                    HStack(spacing: 8) {
+                        PaymentBadge(method: method, size: 16)
+                        Text(method.displayTitle)
+                        if let field = method.filledFields.first {
+                            Text(PaymentLock.mask(field.value))
+                                .font(.callout)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            HStack(spacing: 6) {
+                Image(systemName: paymentLock.isUnlocked ? "lock.open" : "lock")
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+                Text(paymentLock.isUnlocked
+                     ? "Unlocked — values can be edited."
+                     : "Masked and read-only until you authenticate.")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
     private var notesSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Notes / Terms").font(.callout)
-                    Spacer()
-                    Button("Use default") { invoice.notes = business.defaultNotes }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
-                }
-                TextEditor(text: $invoice.notes)
-                    .font(.body)
-                    .frame(height: 130)
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
-
-                Text("Footer message").font(.callout)
-                TextField("It was a pleasure working with you!", text: $invoice.footerMessage)
+        VStack(alignment: .leading, spacing: Metrics.rowGap) {
+            SectionHeader(title: "Notes") {
+                Button("Use default") { invoice.notes = business.defaultNotes }
+                    .buttonStyle(.borderless)
             }
-            .padding(6)
-        } label: {
-            sectionTitle("Notes")
+
+            // Starts at three lines and grows with what is typed, rather than
+            // reserving 130pt of empty box on an invoice that has no terms.
+            TextField("Notes and terms", text: $invoice.notes, axis: .vertical)
+                .lineLimit(3...14)
+                .textFieldStyle(.roundedBorder)
+
+            FormRow(label: "Footer") {
+                TextField("It was a pleasure working with you!",
+                          text: $invoice.footerMessage)
+            }
+            .font(.callout)
         }
     }
 

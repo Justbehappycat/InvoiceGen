@@ -16,10 +16,10 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView(section: $section, search: $search, statusFilter: $statusFilter)
-                .navigationSplitViewColumnWidth(min: 244, ideal: 288, max: 420)
+                .navigationSplitViewColumnWidth(min: 216, ideal: 240, max: 400)
         } detail: {
             detail
-                .frame(minWidth: 820)
+                .frame(minWidth: 680)
         }
         .navigationSplitViewStyle(.balanced)
         .alert("Payment details couldn't be verified", isPresented: $showVaultAlert) {

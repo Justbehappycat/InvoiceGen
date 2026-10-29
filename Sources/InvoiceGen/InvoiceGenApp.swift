@@ -43,6 +43,11 @@ struct InvoiceGenApp: App {
             let width = args.count > index + 2 ? Double(args[index + 2]) ?? 1320 : 1320
             let height = args.count > index + 3 ? Double(args[index + 3]) ?? 860 : 860
             let screen = args.count > index + 4 ? args[index + 4] : "invoices"
+            // Optional 5th argument forces an appearance, so both themes can
+            // actually be looked at rather than assumed from semantic colours.
+            if args.count > index + 5 {
+                NSApp.appearance = NSAppearance(named: args[index + 5] == "dark" ? .darkAqua : .aqua)
+            }
             MainActor.assumeIsolated {
                 // The vault opens on a background queue, so without this the
                 // capture races it and the shot shows "No payment methods yet"
