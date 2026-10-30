@@ -89,6 +89,7 @@ enum OnDeviceAssist {
         case unavailable(Readiness)
         case changedNumbers
         case addedMaterial
+        case droppedMaterial
         case empty
 
         var errorDescription: String? {
@@ -102,6 +103,8 @@ enum OnDeviceAssist {
                 return "The suggestion changed a number, so it was discarded."
             case .addedMaterial:
                 return "The suggestion added more than the line says, so it was discarded."
+            case .droppedMaterial:
+                return "The suggestion left out part of what you wrote, so it was discarded."
             case .empty:
                 return "Nothing to tidy up."
             }
@@ -144,6 +147,28 @@ enum OnDeviceAssist {
     /// - A description may grow by rewording, not by new material: anything
     ///   past three times the original (or 60 characters more) is discarded.
     /// - No number may move, in either direction.
+    /// - Nothing the user wrote may go missing: a tidier line that drops
+    ///   "Podcast package" reads worse than the original, not better.
+    /// Joining words a rewrite may fairly swap for "and" or a comma.
+    private static let connectives: Set<String> = [
+        "and", "with", "plus", "also", "each", "from", "into", "including", "includes", "the", "for",
+    ]
+
+    /// The words of `source` (four letters or more) that `result` no longer
+    /// has. A word counts as kept when the result has one starting with the
+    /// same three letters, so expanding shorthand ("intvw" -> "interview")
+    /// and fixing a typo ("socail" -> "social") both pass, while a dropped
+    /// "Podcast package" does not.
+    static func droppedWords(source: String, result: String) -> [String] {
+        func words(_ text: String) -> [String] {
+            text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        }
+        let kept = Set(words(result).filter { $0.count >= 3 }.map { String($0.prefix(3)) })
+        return words(source).filter { word in
+            word.count >= 4 && !connectives.contains(word) && !kept.contains(String(word.prefix(3)))
+        }
+    }
+
     static func vet(_ raw: Proposal, title: String, details: String) throws -> Proposal {
         func clean(_ s: String) -> String {
             let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -159,8 +184,59 @@ enum OnDeviceAssist {
         guard !changesNumbers(source: title + "\n" + details,
                               result: proposal.title + " " + proposal.details)
         else { throw Failure.changedNumbers }
+        guard droppedWords(source: title + " " + details,
+                           result: proposal.title + " " + proposal.details).isEmpty
+        else { throw Failure.droppedMaterial }
         return proposal
     }
+
+    // MARK: - The prompt
+
+    /// Tuned against real shorthand on the on-device model. Asking a model
+    /// this size to "rewrite more" makes it invent -- a voiceover and
+    /// graphics appeared on a bare "podcast edit" -- and drift into "we will
+    /// ...". Worked examples fix both: it copies their shape. None of them
+    /// is a line a user is likely to type verbatim, so it learns the style
+    /// without parroting the content ("full-length" once leaked from an
+    /// example into an unrelated reel).
+    static let instructions = """
+        You edit invoice lines for a freelance video and post-production \
+        studio. The freelancer types shorthand; you return the line as the \
+        client should read it.
+
+        How to rewrite:
+        - Correct spelling and typos, and expand every abbreviation.
+        - Write the description as a clean invoice phrase: noun phrases \
+        joined with "and" or commas, or "including ...". Not a story: never \
+        "we", "I", "will" or "have completed".
+        - Keep every item, every detail and every number the freelancer \
+        wrote. Numbers stay as digits, next to what they count: "clips 2" \
+        becomes "2 clips".
+        - If a field already reads well, return it unchanged. Fix only \
+        what is wrong; never shorten a description by leaving words out.
+        - Add nothing. No services, steps, deliverables or qualities that \
+        are not in the input. If the description is empty, return it empty.
+        - The name is a short Title Case heading.
+
+        Examples:
+        Name: ep 7 | Description: vertical cuts 3, trailer x1
+        -> Name: Episode 7 | Description: 3 vertical cuts and 1 trailer
+
+        Name: ep1 edit + colour pass | Description: long x1 short x1
+        -> Name: Episode 1 Edit and Colour Pass | Description: 1 long cut and 1 short cut
+
+        Name: rev rd 3 | Description: client notes, recut intvw, swap music
+        -> Name: Revision Round 3 | Description: Client notes, including an interview recut and a music swap
+
+        Name: podcast edit | Description: (empty)
+        -> Name: Podcast Edit | Description: (empty)
+
+        Name: ep 4 | Description: Promo bundle — 1 trailer + 3 teasers
+        -> Name: Episode 4 | Description: Promo bundle: 1 trailer and 3 teasers
+
+        Name: gfx pkg | Description: lower thirds + endcard
+        -> Name: Graphics Package | Description: Lower thirds and an end card
+        """
 
     // MARK: - The call
 
@@ -176,62 +252,27 @@ enum OnDeviceAssist {
         #if canImport(FoundationModels)
         guard #available(macOS 26.0, *) else { throw Failure.unavailable(.unsupportedOS) }
 
-        // Tuned against real shorthand on the on-device model. Asking a model
-        // this size to "rewrite more" makes it invent -- a voiceover and
-        // graphics appeared on a bare "podcast edit" -- and drift into "we will
-        // ...". Worked examples fix both: it copies their shape. None of them
-        // is a line a user is likely to type verbatim, so it learns the style
-        // without parroting the content ("full-length" once leaked from an
-        // example into an unrelated reel).
-        let session = LanguageModelSession(model: SystemLanguageModel.default) {
-            """
-            You edit invoice lines for a freelance video and post-production \
-            studio. The freelancer types shorthand; you return the line as the \
-            client should read it.
+        let prompt = "Column heading: \(heading)\n"
+            + "Name: \(title) | Description: \(details.isEmpty ? "(empty)" : details)"
+        let sourceTitle = String(title.prefix(inputLimit))
+        let sourceDetails = String(details.prefix(inputLimit))
 
-            How to rewrite:
-            - Correct spelling and typos, and expand every abbreviation.
-            - Write the description as a clean invoice phrase: noun phrases \
-            joined with "and" or commas, or "including ...". Not a story: never \
-            "we", "I", "will" or "have completed".
-            - Keep every item, every detail and every number the freelancer \
-            wrote. Numbers stay as digits, next to what they count: "clips 2" \
-            becomes "2 clips".
-            - Add nothing. No services, steps, deliverables or qualities that \
-            are not in the input. If the description is empty, return it empty.
-            - The name is a short Title Case heading.
-
-            Examples:
-            Name: ep 7 | Description: tiktok cuts 3, trailer x1
-            -> Name: Episode 7 | Description: 3 TikTok cuts and 1 trailer
-
-            Name: ep1 edit + colour pass | Description: long x1 short x1
-            -> Name: Episode 1 Edit and Colour Pass | Description: 1 long cut and 1 short cut
-
-            Name: rev rd 3 | Description: client notes, recut intvw, swap music
-            -> Name: Revision Round 3 | Description: Client notes, including an interview recut and a music swap
-
-            Name: podcast edit | Description: (empty)
-            -> Name: Podcast Edit | Description: (empty)
-
-            Name: gfx pkg | Description: lower thirds + endcard
-            -> Name: Graphics Package | Description: Lower thirds and an end card
-            """
+        // Greedy first, so the same line gets the same suggestion every time.
+        // If the guard turns that down for adding or dropping material -- the
+        // small model's habit, not a verdict on the line -- one more try with
+        // a little sampling, in a fresh session so the rejected answer isn't
+        // in its context. A number that moved is never retried.
+        func ask(_ options: GenerationOptions) async throws -> Proposal {
+            let session = LanguageModelSession(model: SystemLanguageModel.default) { instructions }
+            let response = try await session.respond(to: prompt, generating: TidiedLine.self, options: options)
+            return try vet(Proposal(title: response.content.name, details: response.content.summary),
+                           title: sourceTitle, details: sourceDetails)
         }
-
-        let response = try await session.respond(
-            to: "Column heading: \(heading)\n"
-                + "Name: \(title) | Description: \(details.isEmpty ? "(empty)" : details)",
-            generating: TidiedLine.self,
-            options: GenerationOptions(temperature: 0.2)
-        )
-
-        let proposal = try vet(
-            Proposal(title: response.content.name, details: response.content.summary),
-            title: String(title.prefix(inputLimit)), details: String(details.prefix(inputLimit))
-        )
-
-        return proposal
+        do {
+            return try await ask(GenerationOptions(sampling: .greedy))
+        } catch Failure.addedMaterial, Failure.droppedMaterial {
+            return try await ask(GenerationOptions(temperature: 0.5))
+        }
         #else
         throw Failure.unavailable(.unsupportedOS)
         #endif
@@ -248,7 +289,7 @@ struct TidiedLine {
     @Guide(description: "The item name in Title Case, concise, at most 8 words")
     var name: String
 
-    @Guide(description: "The description as a clear invoice phrase, using only the facts given. Empty when the input description is empty.")
+    @Guide(description: "The whole description, every part of it kept, as a clear invoice phrase using only the facts given. Empty when the input description is empty.")
     var summary: String
 }
 #endif

@@ -1217,6 +1217,17 @@ struct InvoiceGenApp: App {
                   vetted("Episode 2", "two social media clips and 1 full clip",
                          from: "Episode 2", "socialmedida clips 2, full clip 1").hasPrefix("rejected"))
 
+            check("dropping what the user wrote is discarded",
+                  vetted("Episode 1", "1 episode and 2 social clips",
+                         from: "EP1", "Podcast package — 1 episode + 2 social clips").hasPrefix("rejected"))
+            check("expanding shorthand isn't dropping it",
+                  vetted("Revision Round 3", "Client notes, including an interview recut and a music swap",
+                         from: "rev rd 3", "client notes, recut intvw, swap music")
+                    == "Client notes, including an interview recut and a music swap")
+            check("nor is trading \"plus\" for \"and\"",
+                  vetted("Graphics Package", "Lower thirds and an end card",
+                         from: "gfx pkg", "lower thirds plus endcard") == "Lower thirds and an end card")
+
             // Readiness must answer on any Mac, including one with no Apple
             // Intelligence, without throwing or blocking.
             let readiness = OnDeviceAssist.readiness
@@ -1254,9 +1265,33 @@ struct InvoiceGenApp: App {
                             result: proposal.title + " " + proposal.details))
                 } else if case .failure(let error) = live {
                     // A rejected suggestion is the guard working, not a failure.
-                    let rejected = (error as? OnDeviceAssist.Failure) == .changedNumbers
+                    let rejected = [.changedNumbers, .addedMaterial, .droppedMaterial]
+                        .contains(error as? OnDeviceAssist.Failure)
                     print("  model call failed: \(error.localizedDescription)")
                     check("failure was the guard, not a crash", rejected)
+                }
+                // Lines worth eyeballing after any prompt change. Printed, not
+                // asserted: the prose varies, the guard above doesn't.
+                if ProcessInfo.processInfo.environment["INVOICEGEN_WORDING_SAMPLES"] != nil {
+                    let samples = [
+                        ("EP1", "Podcast package — 1 episode + 2 social clips"),
+                        ("Episode 2", "socialmedida clips 2, full clip 1"),
+                        ("ep 5 vo record", "2 hrs studio, mic rental"),
+                        ("rev rd 2", "tighten intro, fix audio sync ep3, new captions"),
+                        ("Colour grade", "Feature-length grade, 2 review sessions"),
+                        ("wedding highlight", ""),
+                    ]
+                    for (t, d) in samples {
+                        nonisolated(unsafe) var out: String?
+                        Task {
+                            do { let p = try await OnDeviceAssist.tidy(title: t, details: d, heading: "Item")
+                                 out = "\(p.title) / \(p.details)" }
+                            catch { out = "rejected: \(error.localizedDescription)" }
+                        }
+                        let until = Date().addingTimeInterval(90)
+                        while out == nil, Date() < until { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+                        print("  \(t) / \(d)\n    -> \(out ?? "timed out")")
+                    }
                 }
             } else {
                 print("  (no on-device model here — skipping the live call)")

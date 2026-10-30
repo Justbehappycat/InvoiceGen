@@ -324,6 +324,14 @@ unconfigured or plain-http address refuses to publish at all.
   code rather than trusted to the prompt: an empty description stays empty, and
   a description that grows past three times its original (or 60 characters
   more) is discarded as new material, not rewording.
+- **It leaves out nothing you did write.** "Podcast package — 1 episode + 2
+  social clips" once came back as just "1 episode and 2 social clips". Every
+  word you wrote (four letters or more, bar joiners like "plus") has to survive
+  in some form -- "intvw" becoming "interview" counts -- or the suggestion is
+  discarded. The model answers greedily, so the same line gets the same
+  suggestion each time; a suggestion discarded for adding or dropping material
+  gets one fresh retry. `INVOICEGEN_WORDING_SAMPLES=1 … --selftest-assist`
+  prints the model's answers for a set of sample lines after a prompt change.
 - **It doesn't waste the model.** One request at a time; the same text is never
   sent twice; editing a line drops queued work for its old text and discards a
   late answer for it; a dismissed suggestion isn't offered again for the same
