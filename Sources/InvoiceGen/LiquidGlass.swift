@@ -20,6 +20,17 @@ extension View {
         }
     }
 
+    /// A round button where the system offers one (macOS 14+); the ordinary
+    /// rounded shape before that.
+    @ViewBuilder
+    func circularButtonShape() -> some View {
+        if #available(macOS 14.0, *) {
+            self.buttonBorderShape(.circle)
+        } else {
+            self
+        }
+    }
+
     /// Full-bleed glass for chrome that floats over scrolling content --
     /// toolbars and the sidebar's filter and summary bars. A Rectangle rather
     /// than a rounded shape, because these run edge to edge.

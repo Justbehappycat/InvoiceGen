@@ -176,7 +176,7 @@ enum UIRegression {
     /// Controls whose only visible content is an icon. Each must have a
     /// tooltip as well as a name, or a sighted mouse user has nothing to go on.
     static let iconOnly: Set<String> = [
-        "New customer", "Line actions", "Reuse", "Preview", "Share", "Shared", "Print",
+        "New Invoice", "New customer", "Line actions", "Reuse", "Preview", "Share", "Shared", "Print",
         "Fit page", "Fit width", "Zoom out", "Zoom in", "Columns",
     ]
 
@@ -244,6 +244,9 @@ enum UIRegression {
                 check("preview hidden when turned off", preview == nil)
             }
         }
+
+        // The primary action is reachable whatever is showing.
+        check("New Invoice is in the toolbar", controls.contains { $0.name == "New Invoice" })
 
         if config.selection == .trashed {
             check("trashed invoice offers Put Back", controls.contains { $0.name == "Put Back" })

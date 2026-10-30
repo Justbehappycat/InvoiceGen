@@ -64,6 +64,23 @@ struct SidebarView: View {
             Divider()
             utilityBar
         }
+        .toolbar {
+            // The thing done most often gets the biggest, brightest control,
+            // where Mail keeps Compose: in the sidebar's toolbar, beside the
+            // sidebar button, the same in every section. Templates stay in the
+            // list's own "New" menu below; this is the one-click blank invoice.
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: newInvoice) {
+                    Label("New Invoice", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                        .font(.title3.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .circularButtonShape()
+                .controlSize(.large)
+                .help("New invoice (⌘N)")
+            }
+        }
     }
 
     private var utilityBar: some View {
