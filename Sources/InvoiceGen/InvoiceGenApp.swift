@@ -1197,6 +1197,26 @@ struct InvoiceGenApp: App {
                       + " moves a number: \(actual)", actual == expected)
             }
 
+            // What every suggestion is vetted for before anyone sees it.
+            func vetted(_ title: String, _ details: String, from t: String, _ d: String) -> String {
+                do { let p = try OnDeviceAssist.vet(.init(title: title, details: details), title: t, details: d)
+                     return p.details.isEmpty ? "<empty>" : p.details }
+                catch { return "rejected: \(error.localizedDescription)" }
+            }
+            check("an empty description stays empty, whatever comes back",
+                  vetted("Podcast Edit", "Includes a voiceover and graphics", from: "podcast edit", "") == "<empty>")
+            check("a literal (empty) is read as empty",
+                  vetted("Podcast Edit", "(empty)", from: "podcast edit", "") == "<empty>")
+            check("rewording may lengthen a little",
+                  vetted("Episode 2", "2 social media clips and 1 full clip",
+                         from: "Episode 2", "socialmedida clips 2, full clip 1") == "2 social media clips and 1 full clip")
+            check("but new material is discarded",
+                  vetted("Drone Footage", "2 flights over the venue at golden hour, colour graded, with licensed music and a 4K master",
+                         from: "drone footage", "2 flights").hasPrefix("rejected"))
+            check("and a moved number still is",
+                  vetted("Episode 2", "two social media clips and 1 full clip",
+                         from: "Episode 2", "socialmedida clips 2, full clip 1").hasPrefix("rejected"))
+
             // Readiness must answer on any Mac, including one with no Apple
             // Intelligence, without throwing or blocking.
             let readiness = OnDeviceAssist.readiness

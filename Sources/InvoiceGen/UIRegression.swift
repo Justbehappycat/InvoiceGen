@@ -373,7 +373,11 @@ enum UIRegression {
         check("Review wording is in the Items header", true)
 
         let invoiceID = AppStore.shared.data.invoices[0].id
-        func itemTitles() -> [String] { AppStore.shared.invoice(id: invoiceID)?.items.map(\.title) ?? [] }
+        // Name and description together: a suggestion may rightly keep the
+        // name and only reword the description.
+        func itemTitles() -> [String] {
+            AppStore.shared.invoice(id: invoiceID)?.items.map { $0.title + " | " + $0.details } ?? []
+        }
         func itemFigures() -> [String] {
             AppStore.shared.invoice(id: invoiceID)?.items.map { "\($0.quantity)×\($0.price)" } ?? []
         }

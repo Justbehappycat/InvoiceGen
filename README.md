@@ -293,10 +293,13 @@ unconfigured or plain-http address refuses to publish at all.
 - Next invoice number, data-file location, backup and restore.
 
 **On-device assist** (macOS 26 or later, Apple Intelligence on)
-- Rewrites shorthand into wording a client reads cleanly: `ep1 edit + colour
-  pass` / `long x1 short x1` becomes `Episode 1 Edit + Colour Pass` / `Long x1
-  Short x1`. Three ways in, all of them ending in the same place -- a note under
-  the line with **Apply**, **Regenerate** and **Dismiss**:
+- Rewrites the shorthand you type into the line a client reads: typos fixed,
+  abbreviations expanded, fragments turned into a clean invoice phrase.
+  `Episode 2` / `socialmedida clips 2, full clip 1` becomes `Episode 2` /
+  `2 social media clips and 1 full clip`; `ep 5 vo record` / `2 hrs studio, mic
+  rental` becomes `Episode 5 Voice Recording` / `2 hours in the studio and a
+  microphone rental`. Three ways in, all ending in the same place -- a note
+  under the line with **Apply**, **Regenerate** and **Dismiss**:
   - **As you edit** (Settings ▸ "Suggest wording as I edit", on by default): a
     line is checked once you pause on it for a moment or move on from it -- never
     per keystroke -- and a suggestion appears only if it would change something.
@@ -311,9 +314,16 @@ unconfigured or plain-http address refuses to publish at all.
   Apply, and only if the line still reads exactly as it did when the suggestion
   was made. ⌘Z undoes it.
 - **It rewords; it never re-prices.** The model is handed two text fields and
-  returns two text fields. Any suggestion whose numbers differ from the input's,
-  in either direction, is discarded rather than shown. Quantities, prices,
-  totals, dates and the verification mark never go near it.
+  returns two text fields. Any suggestion whose numbers differ from the input's
+  is discarded rather than shown -- counted, not just collected, so "2 clips"
+  turning into "two clips" is caught even when "Episode 2" still holds a 2.
+  Quantities, prices, totals, dates and the verification mark never go near it.
+- **It adds nothing you didn't write.** Asked to rewrite more boldly, a model
+  this size invents work -- a bare "podcast edit" came back with a voiceover and
+  graphics -- so the prompt works from examples, and two rules are enforced in
+  code rather than trusted to the prompt: an empty description stays empty, and
+  a description that grows past three times its original (or 60 characters
+  more) is discarded as new material, not rewording.
 - **It doesn't waste the model.** One request at a time; the same text is never
   sent twice; editing a line drops queued work for its old text and discards a
   late answer for it; a dismissed suggestion isn't offered again for the same
