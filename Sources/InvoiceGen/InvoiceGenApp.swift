@@ -1514,6 +1514,7 @@ struct InvoiceGenApp: App {
             print("a draft keeps what parses and shows what didn't:")
             let fields = ContractImport.Fields(
                 clientName: " Lantern Road Media ",
+                clientContact: "Dana Whitfield",
                 clientEmail: "dana@lanternroad.example",
                 projectTitle: "Night Shift",
                 paymentTermDays: 15,
@@ -1525,6 +1526,12 @@ struct InvoiceGenApp: App {
                 ])
             let draft = ContractImport.draft(from: fields)
             check("trims the client", draft.customerName == "Lantern Road Media")
+            check("keeps the contact person", draft.customerContact == "Dana Whitfield")
+            let person = ContractImport.draft(from: .init(clientContact: "Sam Okafor"))
+            check("a lone person is the client, not a contact",
+                  person.customerName == "Sam Okafor" && person.customerContact.isEmpty)
+            let twice = ContractImport.draft(from: .init(clientName: "Sam Okafor", clientContact: "sam okafor"))
+            check("the same person isn't named twice", twice.customerContact.isEmpty)
             check("keeps the two good payments", draft.milestones.count == 2)
             check("sorted by due date", draft.milestones.first?.deliverable == "Episode 1")
             check("lists the two it refused", draft.discarded.count == 2)
@@ -1558,6 +1565,8 @@ struct InvoiceGenApp: App {
                 check("client created", store.data.customers.count == 1)
                 check("project bills that client",
                       project.customerID == store.data.customers.first?.id)
+                check("with the contact person on file",
+                      store.data.customers.first?.contactName == "Dana Whitfield")
                 store.undo()
                 check("one undo removes the project", store.data.projects.isEmpty)
                 check("and the client it made", store.data.customers.isEmpty)
@@ -1568,6 +1577,14 @@ struct InvoiceGenApp: App {
                 let second = store.importProject(from: draft)
                 check("still one client", store.data.customers.count == 1)
                 check("pointing at the existing one", second.customerID == regular.id)
+                check("its blank contact filled in",
+                      store.customer(id: regular.id)?.contactName == "Dana Whitfield")
+                if let i = store.data.customers.firstIndex(where: { $0.id == regular.id }) {
+                    store.data.customers[i].contactName = "Typed By Hand"
+                }
+                _ = store.importProject(from: draft)
+                check("but a contact on file is never overwritten",
+                      store.customer(id: regular.id)?.contactName == "Typed By Hand")
             }
 
             print("reading a real PDF:")
@@ -1579,7 +1596,7 @@ struct InvoiceGenApp: App {
             INDEPENDENT CONTRACTOR AGREEMENT — POST PRODUCTION
 
             Client: Lantern Road Media LLC
-            Billing contact: dana@lanternroad.example
+            Billing contact: Dana Whitfield, Producer (dana@lanternroad.example)
 
             Contractor shall edit the podcast series "Night Shift" (8 episodes).
 
@@ -1626,11 +1643,12 @@ struct InvoiceGenApp: App {
                 }
                 switch live {
                 case .success(let found):
-                    print("    client: \(found.customerName)   project: \(found.projectTitle)")
+                    print("    client: \(found.customerName)   contact: \(found.customerContact)   project: \(found.projectTitle)")
                     for m in found.milestones {
                         print("    \(Fmt.shortDate(m.dueDate))  \(m.deliverable)  \(m.amount)")
                     }
                     check("found the client", found.customerName.contains("Lantern Road"))
+                    check("found the contact person", found.customerContact.contains("Dana Whitfield"))
                     check("found all four payments", found.milestones.count == 4)
                     check("totals 1200, summed by the app", found.contractTotal == 1200)
                 case .failure(let error):
@@ -1906,6 +1924,10 @@ struct InvoiceGenApp: App {
                     focus.customerID = customer.id
                     focus.requestedSection = .customers
                 } .keyboardShortcut("n", modifiers: [.command, .shift])
+
+                Button("Import Contract…") {
+                    focus.contractImportRequested = true
+                } .keyboardShortcut("i", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .toolbar) {
@@ -1992,6 +2014,8 @@ final class AppFocus: ObservableObject {
     @Published var customerID: UUID?
     @Published var projectID: UUID?
     @Published var requestedSection: SidebarSection?
+    /// Set by File ▸ Import Contract…; the sidebar opens the sheet and clears it.
+    @Published var contractImportRequested = false
 
     var isMultiSelecting: Bool { selectedInvoiceIDs.count > 1 }
 

@@ -54,7 +54,19 @@ struct ContractImportView: View {
         }
     }
 
+    @ViewBuilder
     private var chooser: some View {
+        // The entry is always offered, so it can always explain itself:
+        // a hidden menu item gives no hint why it isn't there.
+        if let why = OnDeviceAssist.readiness.explanation {
+            Label(why, systemImage: "exclamationmark.triangle")
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            pdfChooser
+        }
+    }
+
+    private var pdfChooser: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
                 choose()
@@ -90,8 +102,12 @@ struct ContractImportView: View {
             VStack(alignment: .leading, spacing: Metrics.rowGap) {
                 SectionHeader("Found in \(sourceName)")
 
-                FormRow(label: "Client") {
-                    TextField("Client name", text: $draft.customerName)
+                FormRow(label: "Company") {
+                    TextField("Company, or the person if it's an individual",
+                              text: $draft.customerName)
+                }
+                FormRow(label: "Contact") {
+                    TextField("Person the invoices go to", text: $draft.customerContact)
                 }
                 FormRow(label: "Email") {
                     TextField("Billing email", text: $draft.customerEmail)
@@ -101,7 +117,8 @@ struct ContractImportView: View {
                 }
 
                 if existingClient != nil {
-                    Label("An existing client with this name will be used.",
+                    Label("An existing client with this name will be used. Only "
+                          + "a blank contact or email on file is filled in.",
                           systemImage: "person.crop.circle.badge.checkmark")
                         .font(.caption)
                         .foregroundStyle(.secondary)

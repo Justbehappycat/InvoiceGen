@@ -64,6 +64,19 @@ struct SidebarView: View {
             Divider()
             utilityBar
         }
+        // Here rather than on the project list, so File ▸ Import Contract…
+        // works from whichever section is showing.
+        .sheet(isPresented: $isImportingContract) {
+            ContractImportView()
+                .environmentObject(store)
+                .environmentObject(focus)
+        }
+        .onReceive(focus.$contractImportRequested) { requested in
+            guard requested else { return }
+            focus.contractImportRequested = false
+            section = .projects
+            isImportingContract = true
+        }
         .toolbar {
             // The thing done most often gets the biggest, brightest control,
             // where Mail keeps Compose: in the sidebar's toolbar, beside the
@@ -438,32 +451,24 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    // With the on-device model available, "New" offers a
-                    // contract as a starting point; without it, it is the
-                    // plain button it always was.
-                    if OnDeviceAssist.isReady {
-                        Menu {
-                            Button("Empty Project") {
-                                let project = store.newProject()
-                                focus.projectID = project.id
-                            }
-                            Button("From a Contract…") { isImportingContract = true }
-                        } label: {
-                            Label("New", systemImage: "plus")
-                        }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
-                    } else {
-                        Button {
-                            let project = store.newProject()
-                            focus.projectID = project.id
-                        } label: {
-                            Label("New", systemImage: "plus")
-                        }
-                        .buttonStyle(.borderless)
+                HStack(spacing: 10) {
+                    // A contract is how most jobs arrive, so importing one is a
+                    // button in plain sight, not an item inside "New". It is
+                    // shown even without the model: the sheet then says why.
+                    Button { isImportingContract = true } label: {
+                        Label("Import Contract", systemImage: "doc.text.magnifyingglass")
                     }
+                    .buttonStyle(.borderless)
+                    .help("Read a contract PDF into a new project (⇧⌘I)")
+                    Spacer()
+                    Button {
+                        let project = store.newProject()
+                        focus.projectID = project.id
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("New empty project")
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -472,10 +477,23 @@ struct SidebarView: View {
             .liquidGlassBar()
         }
         .searchable(text: $search, placement: .sidebar, prompt: "Search projects")
-        .sheet(isPresented: $isImportingContract) {
-            ContractImportView()
-                .environmentObject(store)
-                .environmentObject(focus)
+        .overlay {
+            if store.data.projects.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.secondary)
+                    Text("No projects yet").font(.headline)
+                    Text("Import a contract and its payment schedule becomes a project.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Import Contract…") { isImportingContract = true }
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding(20)
+            }
         }
     }
 

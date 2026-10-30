@@ -103,9 +103,15 @@ unconfigured or plain-http address refuses to publish at all.
   pre-projects file.
 
 **Import a contract** (needs the on-device model — see On-device assist)
-- Projects ▸ New ▸ From a Contract… reads a contract PDF and proposes the
-  client, the project and its whole payment schedule, so a job that arrives as
-  a PDF is not typed in by hand.
+- **Import Contract** at the top of the Projects list (or File ▸ Import
+  Contract…, ⇧⌘I, from anywhere) reads a contract PDF and proposes the client,
+  the project and its whole payment schedule, so a job that arrives as a PDF is
+  not typed in by hand. The entry is always there; without the model, the sheet
+  says why it can't read one.
+- **Company and contact person.** The client company and the named person at it
+  the invoices go to (a producer, accounts payable) come back separately, and
+  fill the client's Business name and Contact name. A client who is a person
+  is the client, not a contact, and is never named twice.
 - **Read on this Mac.** A contract is the most sensitive thing this app will
   ever open, so it goes to `SystemLanguageModel` and nowhere else. The build
   refuses the Private Cloud Compute model outright.
@@ -116,7 +122,8 @@ unconfigured or plain-http address refuses to publish at all.
   parsed amounts; the model is never asked for it.
 - **Nothing is created until you say so.** Every field arrives editable in a
   review sheet. Creating is one undo step, and a client whose name already
-  exists is reused rather than duplicated.
+  exists is reused rather than duplicated -- the contract only fills in a
+  contact or email left blank on file, never overwrites one.
 - Long contracts are trimmed to their opening and the paragraphs that mention
   money before they are read. A scanned contract has no text to read, and is
   refused with an explanation rather than handed to the model empty.
@@ -347,9 +354,15 @@ unconfigured or plain-http address refuses to publish at all.
   arrives inline, changes nothing until Apply, and leaves the figures alone.
 
 **Import a contract** (needs the on-device model — see On-device assist)
-- Projects ▸ New ▸ From a Contract… reads a contract PDF and proposes the
-  client, the project and its whole payment schedule, so a job that arrives as
-  a PDF is not typed in by hand.
+- **Import Contract** at the top of the Projects list (or File ▸ Import
+  Contract…, ⇧⌘I, from anywhere) reads a contract PDF and proposes the client,
+  the project and its whole payment schedule, so a job that arrives as a PDF is
+  not typed in by hand. The entry is always there; without the model, the sheet
+  says why it can't read one.
+- **Company and contact person.** The client company and the named person at it
+  the invoices go to (a producer, accounts payable) come back separately, and
+  fill the client's Business name and Contact name. A client who is a person
+  is the client, not a contact, and is never named twice.
 - **Read on this Mac.** A contract is the most sensitive thing this app will
   ever open, so it goes to `SystemLanguageModel` and nowhere else. The build
   refuses the Private Cloud Compute model outright.
@@ -360,7 +373,8 @@ unconfigured or plain-http address refuses to publish at all.
   parsed amounts; the model is never asked for it.
 - **Nothing is created until you say so.** Every field arrives editable in a
   review sheet. Creating is one undo step, and a client whose name already
-  exists is reused rather than duplicated.
+  exists is reused rather than duplicated -- the contract only fills in a
+  contact or email left blank on file, never overwrites one.
 - Long contracts are trimmed to their opening and the paragraphs that mention
   money before they are read. A scanned contract has no text to read, and is
   refused with an explanation rather than handed to the model empty.

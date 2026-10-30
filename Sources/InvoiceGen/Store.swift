@@ -811,13 +811,28 @@ final class AppStore: ObservableObject {
         var customerID: UUID?
         let wanted = draft.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !wanted.isEmpty {
-            if let existing = data.customers.first(where: {
+            if let index = data.customers.firstIndex(where: {
                 $0.name.caseInsensitiveCompare(wanted) == .orderedSame
             }) {
+                // A returning client keeps what is on file. The contract only
+                // fills in what was blank -- it never overwrites a contact or
+                // an email someone typed in by hand.
+                var existing = data.customers[index]
+                if existing.contactName.isEmpty, !draft.customerContact.isEmpty {
+                    existing.contactName = draft.customerContact
+                }
+                if existing.email.isEmpty, !draft.customerEmail.isEmpty {
+                    existing.email = draft.customerEmail
+                }
+                if existing != data.customers[index] {
+                    existing.updatedAt = Date()
+                    data.customers[index] = existing
+                }
                 customerID = existing.id
             } else {
                 var customer = Customer()
                 customer.name = wanted
+                customer.contactName = draft.customerContact
                 customer.email = draft.customerEmail
                 customer.updatedAt = Date()
                 data.customers.append(customer)

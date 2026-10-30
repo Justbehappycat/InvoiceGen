@@ -26,7 +26,11 @@ enum ContractImport {
 
     /// What the model found, after parsing and validation.
     struct Draft: Equatable {
+        /// The company that pays -- or the person, when the client is one.
         var customerName: String = ""
+        /// The person at that company the bill is for. Empty for a client
+        /// who is an individual.
+        var customerContact: String = ""
         var customerEmail: String = ""
         var projectTitle: String = ""
         var contractTotal: Decimal = 0
@@ -154,6 +158,7 @@ enum ContractImport {
     /// supports -- not just one new enough to have the framework.
     struct Fields {
         var clientName = ""
+        var clientContact = ""
         var clientEmail = ""
         var projectTitle = ""
         var paymentTermDays = 30
@@ -171,6 +176,16 @@ enum ContractImport {
     static func draft(from extracted: Fields) -> Draft {
         var draft = Draft()
         draft.customerName = extracted.clientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.customerContact = extracted.clientContact.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A client who is a person comes back either way round: as the
+        // client, or as a contact with no company. Either way they are the
+        // client, and naming them twice would print them twice on the bill.
+        if draft.customerName.isEmpty {
+            draft.customerName = draft.customerContact
+            draft.customerContact = ""
+        } else if draft.customerContact.caseInsensitiveCompare(draft.customerName) == .orderedSame {
+            draft.customerContact = ""
+        }
         draft.customerEmail = extracted.clientEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.projectTitle = extracted.projectTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.paymentTermDays = (1...365).contains(extracted.paymentTermDays)
@@ -216,7 +231,11 @@ enum ContractImport {
             - Dates: YYYY-MM-DD. If a payment has no date, leave it empty.
             - One milestone per scheduled payment. "Episodes 2-3 — $300" is one \
             milestone, not two.
-            - The client is whoever pays, not the contractor being paid.
+            - The client is whoever pays, not the contractor being paid: the \
+            company, or the person when an individual hires the contractor.
+            - The contact is the named person at the client company the work or \
+            the invoices go to, such as a producer or accounts payable. Empty \
+            if nobody is named or the client is that person.
             - Leave a field empty rather than guessing at it.
             """
         }
@@ -234,6 +253,7 @@ enum ContractImport {
         let answer = response.content
         let draft = draft(from: Fields(
             clientName: answer.clientName,
+            clientContact: answer.clientContact,
             clientEmail: answer.clientEmail,
             projectTitle: answer.projectTitle,
             paymentTermDays: answer.paymentTermDays,
@@ -258,8 +278,11 @@ enum ContractImport {
 @available(macOS 26.0, *)
 @Generable(description: "Billing facts from a freelance contract")
 struct RawContract {
-    @Guide(description: "The client company or person who pays. Empty if unclear.")
+    @Guide(description: "The client company that pays, or the person's full name if the client is an individual. Empty if unclear.")
     var clientName: String
+
+    @Guide(description: "The named person at the client company invoices go to. Empty if none is named or the client is an individual.")
+    var clientContact: String
 
     @Guide(description: "The client's billing email. Empty if absent.")
     var clientEmail: String
