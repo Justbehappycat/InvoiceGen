@@ -298,8 +298,8 @@ unconfigured or plain-http address refuses to publish at all.
   `Episode 2` / `socialmedida clips 2, full clip 1` becomes `Episode 2` /
   `2 social media clips and 1 full clip`; `ep 5 vo record` / `2 hrs studio, mic
   rental` becomes `Episode 5 Voice Recording` / `2 hours in the studio and a
-  microphone rental`. Three ways in, all ending in the same place -- a note
-  under the line with **Apply**, **Regenerate** and **Dismiss**:
+  microphone rental`. Three ways in, all ending in the same place -- a card
+  under the line ("Suggested description") with **Apply**, **Dismiss** and ↻ Regenerate:
   - **As you edit** (Settings ▸ "Suggest wording as I edit", on by default): a
     line is checked once you pause on it for a moment or move on from it -- never
     per keystroke -- and a suggestion appears only if it would change something.

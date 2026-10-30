@@ -1020,6 +1020,7 @@ struct LineItemRow: View {
         case .suggestion(let proposal):
             WordingSuggestion(
                 proposal: proposal,
+                original: item,
                 apply: {
                     // The one place a suggestion becomes data, and only here.
                     if let accepted = wording.apply(item, heading: itemHeading) {
@@ -1065,38 +1066,71 @@ struct LineItemRow: View {
     }
 }
 
-/// One suggestion, inline: what it would read, and the three answers.
-/// Plain text and borderless buttons -- it should read as a note in the
-/// margin, not as a feature announcing itself.
+/// One suggestion, as a card under its line: what it would read, and the
+/// three answers. Only the parts that change are shown, under a heading that
+/// says which part that is.
 private struct WordingSuggestion: View {
     let proposal: OnDeviceAssist.Proposal
+    let original: LineItem
     let apply: () -> Void
     let regenerate: () -> Void
     let dismiss: () -> Void
 
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            // foregroundColor, not foregroundStyle: concatenated Text needs
-            // the Text-returning form, and that one is macOS 14+.
-            (Text("Suggested: ").foregroundColor(.secondary)
-             + Text(proposal.title).fontWeight(.medium)
-             + Text(proposal.details.isEmpty ? "" : " — " + proposal.details).foregroundColor(.secondary))
-                .font(.callout)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-            Button("Apply", action: apply)
-                .accessibilityLabel("Apply suggestion")
-            Button("Regenerate", action: regenerate)
-                .accessibilityLabel("Regenerate suggestion")
-            Button("Dismiss", action: dismiss)
-                .accessibilityLabel("Dismiss suggestion")
+    private var renamesTitle: Bool { proposal.title != original.title }
+    private var rewritesDetails: Bool { proposal.details != original.details }
+
+    private var heading: String {
+        switch (renamesTitle, rewritesDetails) {
+        case (true, false): return "Suggested name"
+        case (false, true): return "Suggested description"
+        default: return "Suggested wording"
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(heading, systemImage: "sparkles")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                if renamesTitle {
+                    Text(proposal.title).fontWeight(.medium)
+                }
+                if rewritesDetails || (renamesTitle && !proposal.details.isEmpty) {
+                    Text(proposal.details)
+                        .foregroundStyle(renamesTitle ? .secondary : .primary)
+                }
+            }
+            .font(.callout)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+
+            HStack(spacing: 8) {
+                Button(action: regenerate) {
+                    Label("Regenerate", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .labelStyle(.iconOnly)
+                .help("Ask for another suggestion")
+                .accessibilityLabel("Regenerate suggestion")
+                Spacer()
+                Button("Dismiss", action: dismiss)
+                    .accessibilityLabel("Dismiss suggestion")
+                Button("Apply", action: apply)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityLabel("Apply suggestion")
+            }
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(Color.accentColor.opacity(0.07),
+                    in: RoundedRectangle(cornerRadius: Metrics.cornerPanel, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cornerPanel, style: .continuous)
+            .strokeBorder(Color.accentColor.opacity(0.25), lineWidth: 1))
         .padding(.trailing, Metrics.actionColumn)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Wording suggestion: \(proposal.title)")
+        .accessibilityLabel("\(heading): \(rewritesDetails && !renamesTitle ? proposal.details : proposal.title)")
         .help("Suggested by the model on this Mac. Nothing changes unless you press Apply.")
     }
 }
