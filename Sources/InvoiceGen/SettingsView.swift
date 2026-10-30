@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var publishTokenEntry = ""
     @State private var tokenSaved = false
     @AppStorage("onDeviceAssist") private var onDeviceAssist = true
+    @AppStorage("onDeviceAssistProactive") private var onDeviceAssistProactive = true
 
     private var business: Binding<BusinessProfile> {
         Binding(get: { store.data.business }, set: { store.data.business = $0 })
@@ -635,6 +636,15 @@ struct SettingsView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 Toggle("Offer to tidy up item wording", isOn: $onDeviceAssist)
+                Toggle("Suggest wording as I edit", isOn: $onDeviceAssistProactive)
+                    .disabled(!onDeviceAssist)
+                    .padding(.leading, 20)
+                Text("Checks a line once you pause or move on from it, and shows a suggestion under "
+                     + "it only when there is one worth making. Off, the model runs only when you ask.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 20)
                 Text("Adds \"Tidy up wording\" to a line item's menu. Apple's model runs on "
                      + "this Mac — nothing is sent anywhere, and it works with no network at all.")
                     .font(.caption)

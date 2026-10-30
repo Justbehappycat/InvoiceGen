@@ -20,6 +20,9 @@ struct InvoiceEditorView: View {
     /// Payment details change once and then sit there, so the section opens
     /// collapsed. The choice sticks across invoices and relaunches.
     @AppStorage("showPaymentDetail") private var showPaymentDetail = false
+    /// One per invoice: the editor is rebuilt per invoice (`.id`), so cached
+    /// answers and pending checks never leak from one invoice into the next.
+    @StateObject private var wording = WordingAssistant()
 
     private var customer: Customer? { store.customer(id: invoice.customerID) }
     private var business: BusinessProfile { store.data.business }
@@ -33,6 +36,7 @@ struct InvoiceEditorView: View {
                 // crushing either side. No layout priority: giving the form
                 // one lets it swallow the preview whole.
                 form
+                    .environmentObject(wording)
                     .frame(minWidth: 520, idealWidth: 580)
                 if showPreview {
                     DocumentPreview(invoice: invoice, customer: customer, business: business)
@@ -337,7 +341,15 @@ struct InvoiceEditorView: View {
             }
             .padding(.horizontal, Metrics.gutter)
             .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Editor-only, the form would otherwise run the full width of the
+            // window: item fields a metre long and Totals labels a screen away
+            // from their figures. So the column stops at a readable width and
+            // centres in what's left -- no card, just space either side. With
+            // the preview showing, the pane is already narrow and keeps its
+            // width. A modifier value, not a different view, so toggling the
+            // preview never rebuilds the form and focus and edits survive it.
+            .frame(maxWidth: showPreview ? .infinity : Metrics.editorMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .accessibilityIdentifier("invoice-editor")
@@ -622,6 +634,19 @@ struct InvoiceEditorView: View {
     private var itemsSection: some View {
         VStack(alignment: .leading, spacing: Metrics.rowGap) {
             SectionHeader(title: "Items") {
+                // The whole-list review, kept beside the list it reviews and
+                // as quiet as the Columns control next to it. Absent, not
+                // disabled, when the model can't run.
+                if wording.canSuggest {
+                    Button {
+                        wording.reviewAll(invoice.items, heading: invoice.columns.itemHeading)
+                    } label: {
+                        Label("Review wording", systemImage: "text.badge.checkmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Check every line's wording with the model on this Mac. "
+                          + "Suggestions appear under each line; nothing changes until you apply one.")
+                }
                 Button {
                     isEditingColumns = true
                 } label: {
@@ -921,10 +946,9 @@ struct LineItemRow: View {
     let onDelete: () -> Void
     let onSaveToCatalog: () -> Void
 
-    @AppStorage("onDeviceAssist") private var assistEnabled = true
-    @State private var proposal: OnDeviceAssist.Proposal?
-    @State private var isTidying = false
-    @State private var assistError: String?
+    @EnvironmentObject private var wording: WordingAssistant
+    @FocusState private var editing: Field?
+    private enum Field { case title, details }
 
     var body: some View {
         // Two lines. The figures share a line with the name, and the
@@ -935,6 +959,7 @@ struct LineItemRow: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 TextField("Item name", text: $item.title)
+                    .focused($editing, equals: .title)
                     .frame(maxWidth: .infinity)
                 DecimalField(placeholder: "1", value: $item.quantity, alignment: .trailing)
                     .frame(width: Metrics.quantityColumn - 4)
@@ -950,6 +975,7 @@ struct LineItemRow: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TextField("Description (optional)", text: $item.details, axis: .vertical)
+                    .focused($editing, equals: .details)
                     .lineLimit(1...6)
                     .font(.callout)
                 Toggle("Taxable", isOn: $item.taxable)
@@ -958,116 +984,120 @@ struct LineItemRow: View {
                     .fixedSize()
             }
             .padding(.trailing, Metrics.actionColumn)
+
+            suggestionLine
         }
         .padding(.vertical, 6)
-        .sheet(item: $proposal) { proposal in
-            TidyReview(item: item, proposal: proposal) { accepted in
-                if accepted {
-                    item.title = proposal.title
-                    item.details = proposal.details
-                }
-                self.proposal = nil
-            }
+        .onChange(of: item.title) { _ in wording.edited(item, heading: itemHeading) }
+        .onChange(of: item.details) { _ in wording.edited(item, heading: itemHeading) }
+        // Leaving the line is "finished editing": check now rather than wait
+        // out the pause.
+        .onChange(of: editing) { field in
+            if field == nil { wording.finishedEditing(item, heading: itemHeading) }
         }
-        .alert("Couldn't tidy this line",
-               isPresented: Binding(get: { assistError != nil },
-                                    set: { if !$0 { assistError = nil } })) {
-            Button("OK", role: .cancel) { assistError = nil }
-        } message: {
-            Text(assistError ?? "")
+        .onDisappear { wording.forget(item.id) }
+    }
+
+    /// The suggestion lives under the line it is for -- no sheet, no alert, and
+    /// it never takes focus, so typing carries on undisturbed. A check nobody
+    /// asked for shows nothing until it has something worth showing.
+    @ViewBuilder
+    private var suggestionLine: some View {
+        switch wording.state(for: item.id) {
+        case .idle, .working(manual: false):
+            EmptyView()
+        case .working(manual: true):
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Checking the wording…")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        case .alreadyClear:
+            note("This line already reads clearly.")
+        case .failed(let reason):
+            note(reason)
+        case .suggestion(let proposal):
+            WordingSuggestion(
+                proposal: proposal,
+                apply: {
+                    // The one place a suggestion becomes data, and only here.
+                    if let accepted = wording.apply(item, heading: itemHeading) {
+                        item.title = accepted.title
+                        item.details = accepted.details
+                    }
+                },
+                regenerate: { wording.request(item, heading: itemHeading, force: true) },
+                dismiss: { wording.dismiss(item.id) }
+            )
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        HStack(spacing: 6) {
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("OK") { wording.dismiss(item.id) }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .accessibilityLabel("Dismiss message")
         }
     }
 
     private var actions: some View {
         Menu {
-            if assistEnabled, OnDeviceAssist.isReady {
-                Button("Tidy up wording", action: tidy)
-                    .disabled(isTidying || item.title.isEmpty)
+            if wording.isEnabled() {
+                Button("Tidy up wording") { wording.request(item, heading: itemHeading) }
+                    .disabled(item.title.isEmpty || !wording.canSuggest)
             }
             Button("Save to items library", action: onSaveToCatalog)
             Button("Remove line", role: .destructive, action: onDelete)
                 .disabled(!canDelete)
         } label: {
-            if isTidying {
-                ProgressView().controlSize(.small)
-            } else {
-                Label("Line actions", systemImage: "ellipsis.circle")
-            }
+            Label("Line actions", systemImage: "ellipsis.circle")
         }
         .labelStyle(.iconOnly)
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .help("Tidy up, save to the library, or remove this line")
     }
-
-    /// The model only ever proposes. Applying is the sheet's job, and undo
-    /// covers it like any other edit.
-    private func tidy() {
-        isTidying = true
-        Task {
-            defer { isTidying = false }
-            do {
-                let suggested = try await OnDeviceAssist.tidy(
-                    title: item.title, details: item.details, heading: itemHeading
-                )
-                if suggested.changes(from: item) {
-                    proposal = suggested
-                } else {
-                    assistError = "This line already reads clearly."
-                }
-            } catch {
-                assistError = error.localizedDescription
-            }
-        }
-    }
 }
 
-/// Shows what the model suggests beside what is already there. The user
-/// approves the change; nothing is written before that.
-private struct TidyReview: View {
-    let item: LineItem
+/// One suggestion, inline: what it would read, and the three answers.
+/// Plain text and borderless buttons -- it should read as a note in the
+/// margin, not as a feature announcing itself.
+private struct WordingSuggestion: View {
     let proposal: OnDeviceAssist.Proposal
-    let finish: (Bool) -> Void
+    let apply: () -> Void
+    let regenerate: () -> Void
+    let dismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Tidy up wording").font(.headline)
-            Text("Suggested by the model on this Mac. Nothing was sent anywhere, "
-                 + "and the quantity, price and total are untouched.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            comparison("Name", before: item.title, after: proposal.title)
-            if !item.details.isEmpty || !proposal.details.isEmpty {
-                comparison("Description", before: item.details, after: proposal.details)
-            }
-
-            HStack {
-                Spacer()
-                Button("Keep mine") { finish(false) }
-                    .keyboardShortcut(.cancelAction)
-                Button("Use this") { finish(true) }
-                    .keyboardShortcut(.defaultAction)
-            }
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // foregroundColor, not foregroundStyle: concatenated Text needs
+            // the Text-returning form, and that one is macOS 14+.
+            (Text("Suggested: ").foregroundColor(.secondary)
+             + Text(proposal.title).fontWeight(.medium)
+             + Text(proposal.details.isEmpty ? "" : " — " + proposal.details).foregroundColor(.secondary))
+                .font(.callout)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+            Button("Apply", action: apply)
+                .accessibilityLabel("Apply suggestion")
+            Button("Regenerate", action: regenerate)
+                .accessibilityLabel("Regenerate suggestion")
+            Button("Dismiss", action: dismiss)
+                .accessibilityLabel("Dismiss suggestion")
         }
-        .padding(20)
-        .frame(width: 440)
-    }
-
-    @ViewBuilder
-    private func comparison(_ label: String, before: String, after: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(before.isEmpty ? "—" : before)
-                .strikethrough(before != after)
-                .foregroundStyle(before == after ? .primary : .secondary)
-            if before != after {
-                Text(after.isEmpty ? "—" : after)
-            }
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .padding(.trailing, Metrics.actionColumn)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Wording suggestion: \(proposal.title)")
+        .help("Suggested by the model on this Mac. Nothing changes unless you press Apply.")
     }
 }
 

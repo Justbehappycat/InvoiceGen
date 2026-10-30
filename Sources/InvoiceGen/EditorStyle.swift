@@ -27,6 +27,10 @@ enum Metrics {
     /// invoice number box is just a long empty bar.
     static let fieldMaxWidth: CGFloat = 220
 
+    /// The editor column's widest, gutters included, when it has the window
+    /// to itself. Past this, rows are too long to read across.
+    static let editorMaxWidth: CGFloat = 960
+
     // Line-item columns, shared by the header and every row so they cannot
     // drift apart.
     static let quantityColumn: CGFloat = 60

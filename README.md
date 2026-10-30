@@ -293,6 +293,232 @@ unconfigured or plain-http address refuses to publish at all.
 - Next invoice number, data-file location, backup and restore.
 
 **On-device assist** (macOS 26 or later, Apple Intelligence on)
+- Rewrites shorthand into wording a client reads cleanly: `ep1 edit + colour
+  pass` / `long x1 short x1` becomes `Episode 1 Edit + Colour Pass` / `Long x1
+  Short x1`. Three ways in, all of them ending in the same place -- a note under
+  the line with **Apply**, **Regenerate** and **Dismiss**:
+  - **As you edit** (Settings ▸ "Suggest wording as I edit", on by default): a
+    line is checked once you pause on it for a moment or move on from it -- never
+    per keystroke -- and a suggestion appears only if it would change something.
+    Nothing is shown while it checks, and a failure stays silent.
+  - **One line**: ⋯ ▸ Tidy up wording. You asked, so you get an answer either
+    way, including "already reads clearly" or why it couldn't.
+  - **The whole list**: "Review wording" in the Items header goes through every
+    line, one at a time, and stays quiet about lines that are already fine.
+- **No dialogs.** Suggestions sit inline and never take focus, so typing carries
+  on; VoiceOver hears "Wording suggestion ready" for a request you made.
+- **It suggests; it never writes.** The invoice changes only when you press
+  Apply, and only if the line still reads exactly as it did when the suggestion
+  was made. ⌘Z undoes it.
+- **It rewords; it never re-prices.** The model is handed two text fields and
+  returns two text fields. Any suggestion whose numbers differ from the input's,
+  in either direction, is discarded rather than shown. Quantities, prices,
+  totals, dates and the verification mark never go near it.
+- **It doesn't waste the model.** One request at a time; the same text is never
+  sent twice; editing a line drops queued work for its old text and discards a
+  late answer for it; a dismissed suggestion isn't offered again for the same
+  text unless you ask.
+- **It runs on this Mac.** Apple's `SystemLanguageModel`, offline. The same
+  framework offers a Private Cloud Compute model that would send the text to
+  Apple; it is never used, and `build.sh` refuses to build if its name appears
+  outside a comment.
+- Without the model -- an older Mac, Apple Intelligence off, the model still
+  downloading -- the controls are simply absent, and asking explains why.
+- `--selftest-wording` covers the timing rules with a stand-in model;
+  `--selftest-ui` presses Review wording on the real one and checks the result
+  arrives inline, changes nothing until Apply, and leaves the figures alone.
+
+**Import a contract** (needs the on-device model — see On-device assist)
+- Projects ▸ New ▸ From a Contract… reads a contract PDF and proposes the
+  client, the project and its whole payment schedule, so a job that arrives as
+  a PDF is not typed in by hand.
+- **Read on this Mac.** A contract is the most sensitive thing this app will
+  ever open, so it goes to `SystemLanguageModel` and nowhere else. The build
+  refuses the Private Cloud Compute model outright.
+- **The model extracts; the app does the numbers.** Every amount and date comes
+  back as text and is parsed here in `Decimal`. A payment whose amount or date
+  cannot be read is not guessed at — it is listed under "Not used" so you can
+  see what was left out. The contract total is summed by the app from the
+  parsed amounts; the model is never asked for it.
+- **Nothing is created until you say so.** Every field arrives editable in a
+  review sheet. Creating is one undo step, and a client whose name already
+  exists is reused rather than duplicated.
+- Long contracts are trimmed to their opening and the paragraphs that mention
+  money before they are read. A scanned contract has no text to read, and is
+  refused with an explanation rather than handed to the model empty.
+- `--selftest-contract` covers the parsing and its refusals with no model,
+  reads a real generated PDF through PDFKit, and — where the model exists —
+  extracts a four-payment schedule end to end.
+
+**Invoice verification**
+- **Stripes across the banner** (default, at 4%): the code runs the banner's full
+  height behind the title — edge to edge, top and bottom — and nearly the full
+  width of the coloured block, so a reading taken above or below the word
+  crosses every column. The stripes print as a tint of the banner — a slider sets how
+  dark, from 2% to 40%.
+- **The app reads its own mark**, which is why the tint can be that light. A
+  scanner needs 0.70 print contrast because it knows nothing about the page:
+  not where the symbol is, not how big, not what it should say. The app knows
+  all three, so it samples the strip at a known position, normalises against
+  that strip's own range, and compares against the pattern the invoice's
+  numbers should produce. Measured, at every tint from 30% down to 2%: our
+  reader matches 100% of the pattern; a scanner manages only the 30% one.
+- The reading can confirm but never accuse: a high match is proof the mark
+  belongs to those numbers, while a low one just means the sheet carries the
+  mark differently, or not at all, so it never triggers a tamper verdict on
+  its own.
+- The invoice title *is* the mark: solid at the caps, combing open into the
+  verification code down the letterforms. Two styles, chosen in Settings:
+  **inside the letters** (default) keeps the mark exactly the shape of the
+  word — nothing stands in the tracking gaps, nothing extends below the
+  baseline — and **with a strip** grows the same columns below the word. The cuts sit exactly on the pattern's *space* columns,
+  so the ink still standing at the bottom of the letters is the bar pattern —
+  the strip isn't a second object parked underneath, it's the letters
+  resolving into the code. Drawn as vector paths, so it stays crisp at any
+  print resolution.
+- **The contained style is a brand mark, not a scannable symbol.** Code 128
+  needs every column present, and the gaps between letters delete some. That
+  costs nothing in practice: the code prints in the footer and the PDF check
+  reads the page against it either way — `--selftest-mark` proves all three
+  styles reach a verdict. The readable form (`IG1-11-0BEDBC09 · 9 items`) sits
+  quietly in the footer.
+- The whole mark is **one path filled from one gradient** — letters, risers and
+  strip in a single body, so no part of it carries a tone of its own. That is
+  what stops it reading as a word parked on top of a barcode. The foot melts
+  back into the surface too, so there's no ruled bottom edge to give away where
+  it was pasted on.
+- Every bar column *rises* out of the strip and across the baseline, ramping
+  in tone from the strip to the letters' ink. Without that the join doesn't
+  stitch: the strip carries a bar in every column, but above the baseline only
+  the letters carry ink, so between letters a bar appears out of nothing. With
+  it, gap meets gap and bar meets bar all the way across.
+- The title in the banner is set in ink rather than white for the same reason —
+  a white title would force the tone ramp to cross the banner colour itself,
+  which reads as mud rather than as a transition.
+- The code runs through nearly the whole word (fade 0.9), leaving only the caps
+  solid, so the bars blend into the letters rather than stopping partway down.
+  Fade and gamma move together: raising the fade without raising gamma makes
+  the cuts wide by mid-letter and the word stops reading. A linear taper eats the letters too early and the
+  title stops reading; a cut wider than a stroke deletes the letter outright,
+  which is why cut width is tied to the module grid rather than chosen by eye.
+- The strip has two tones, and the choice is binary because print contrast
+  says so. **Quiet** (a shade of the banner colour) scores PCS 0.22 against the
+  0.70 floor: it looks like part of the design and does *not* scan off a
+  printed page. **Ink** scores 0.85 and does. There is no tone in between that
+  passes, so Settings offers the two and states plainly what each costs.
+- A quiet strip does not cost you verification: the PDF check falls back to the
+  code printed in the footer, and still returns a genuine/tampered verdict.
+  Confirmed by `--selftest-mark`.
+- Print contrast signal — `(light − dark) / light` — is the barcode standards'
+  own metric, and it's what the app measures. Vision is not the arbiter: it
+  will decode black bars on a near-black field that no laser scanner could
+  read, and it decoded a quiet strip in a clean digital render that then failed
+  off the rendered page.
+- The code is an HMAC-SHA256 signature over exactly four fields: invoice
+  number, invoice date, total quantity, total amount. The signature prints as
+  eight decimal digits (`IG1-11-48219073`), and the bars encode digits only —
+  four of invoice number, eight of signature. Code 128 packs two digits into
+  one symbol, so an all-numeric payload halves the bar count: 106 bars instead
+  of 216 across the same width, which is the difference between fine texture
+  and deliberate stripes. 10^8 of signature is ample when forging one requires
+  the passphrase regardless; the length only has to resist blind guessing. Change any one of them
+  and the code stops verifying.
+- The key is derived from a passphrase you set (Settings ▸ Security ▸ Invoice
+  verification, behind the same Touch ID gate as payment details) with PBKDF2
+  at 200,000 rounds. The passphrase lives in the encrypted vault; the salt
+  lives in `data.json`, so restoring a backup on another Mac and typing the
+  same passphrase reproduces every past code.
+- Verify with ⇧⌘V: scan the barcode (a handheld scanner types like a keyboard)
+  or type the code. The app recomputes the signature from its own copy and
+  reports genuine, mismatched, unknown, or malformed.
+- **Verify a PDF on its own terms** — "Choose PDF…" reads the bars, then reads
+  the invoice number, date, item count and total *off the page* and recomputes
+  the signature from those. So a PDF whose printed total was edited while the
+  barcode was left alone is caught, even for an invoice this Mac has never
+  seen. When the invoice is held here too, the app cross-checks and reports
+  drift separately: an intact sheet that no longer matches your copy means the
+  invoice was edited after it was sent, which is a different problem from a
+  forged sheet.
+- The signed date is the invoice's *local* calendar date, matching what the
+  sheet prints. Signing a UTC day would have made an evening invoice sign
+  tomorrow's date and every PDF check come back a false mismatch.
+- Changing the passphrase invalidates the codes on invoices already sent.
+
+**Payment methods**
+- Structured, not a notes blob: each method has a badge, a label, and label/value
+  fields (Zelle ID, account number, routing number, handle, …).
+- Kinds: Zelle, Bank Transfer, Wire, PayPal, Venmo, Cash App, Check, Card, Crypto, Other.
+- Fields are per-kind and realistic: Zelle takes an ID (email/phone) and a name,
+  PayPal an email, Venmo a handle, Cash App a cashtag — only Bank Transfer and
+  Wire ask for account/routing/SWIFT. Changing a method's kind drops the old
+  kind's fields instead of stacking them up (⌘Z if that was a misclick).
+- Each kind defines required fields.
+  They can be left blank, but they can't be deleted or relabelled — the same rule
+  applies to the last line item on an invoice.
+- Bank methods can take a badge for 20 common US banks (Chase, BofA, Wells Fargo,
+  Citi, U.S. Bank, PNC, Capital One, TD, Truist, Schwab, Ally, Amex, Discover,
+  Navy Federal, Fifth Third, Regions, Citizens, HSBC, Mercury, Chime).
+- Badges are drawn from a tint + glyph — they are *not* official brand artwork.
+  Drop a real logo onto any method with "Choose logo image…" if you want the
+  genuine mark.
+- Business-wide defaults live in Settings; every invoice keeps its own copy, so
+  changing an old invoice never rewrites history. "Use defaults" re-syncs one.
+- They render on the invoice in a compact two-column "HOW TO PAY" block.
+
+**How payment details are protected**
+- They are never written to `data.json`. They live in `vault.dat`, sealed with
+  AES-256-GCM under a key created in your login Keychain (`WhenUnlockedThisDeviceOnly`),
+  file mode 0600.
+- Editing them requires authentication (Touch ID or your login password). Until
+  then they are shown masked and read-only, and re-lock after 5 minutes.
+- Tampering is detected, not ignored: the GCM tag catches any edit to the
+  ciphertext, and a SHA-256 fingerprint kept beside the key catches a rollback to
+  an older genuine vault or an outright deletion. On any failure the app refuses
+  to put payment details on an invoice and says why — it never quietly prints
+  someone else's account number.
+- Settings ▸ Security shows the current state and an audit trail of when payment
+  details changed.
+- Backups exclude payment details unless you explicitly opt in (and authenticate).
+- The key is **never** created except on a Mac that has no key *and* no vault.
+  It used to be minted whenever a Keychain read failed — but a read fails for
+  reasons that have nothing to do with the key being absent (most often a
+  rebuilt binary whose signature no longer matches the item's ACL), and minting
+  a replacement in that moment orphans a perfectly good vault, permanently.
+  A failed read now reports "key unavailable", which destroys nothing and
+  resolves itself the next time the app runs under the right identity.
+- Writing the key is add-if-absent for the same reason: an update would
+  overwrite the only copy that opens the existing vault. Replacing a key
+  happens only through the explicit repair button.
+- Self-tests that write get their own throwaway data directory, so no
+  diagnostic can touch the real vault. That is not hypothetical: a headless
+  test run under a different code signature is exactly how a vault got
+  orphaned during development.
+- If the Keychain is unreachable — most often because the app was rebuilt or
+  re-signed, since Keychain ACLs follow the signing identity — the key falls back
+  to a 0600 file beside the data and Settings says so. That still encrypts the
+  file at rest, but anything running as your user could read that key; a properly
+  signed build keeps the key in the Keychain.
+
+**Customers**
+- Saved once and reused; each has address, contact, email, phone, internal notes.
+- Per-customer history: every invoice, its status, and total billed.
+- "New invoice for this customer" from the customer screen or the sidebar context menu.
+
+**Library** (bottom of the sidebar)
+- Invoice templates, and a library of reusable services/products with default prices.
+- Add to any invoice from the "Add saved item" menu, or push a line item into the
+  library with "Save to items library".
+
+**Settings**
+- Opens with ⌘, as a normal macOS Settings window — it is set-up, not daily work.
+- Business name, address, phone, email, website, logo.
+- Default payment methods.
+- Accent color, template style, default currency, default payment terms.
+- Default notes/terms (anything beyond payment details) and footer message — new
+  invoices start from these.
+- Next invoice number, data-file location, backup and restore.
+
+**On-device assist** (macOS 26 or later, Apple Intelligence on)
 - "Tidy up wording" in a line item's menu rewrites shorthand into something a
   client reads cleanly: `ep1 edit + colour pass` / `long x1 short x1` becomes
   `Episode 1 Edit + Colour Pass` / `Long x1 Short x1`.

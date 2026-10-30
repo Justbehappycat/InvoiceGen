@@ -48,6 +48,12 @@ struct InvoiceGenApp: App {
         // UI regression suite. UI-check mode has to be switched on before
         // anything touches the store, so this runs first: no Keychain, no
         // saving, an isolated data folder.
+        if args.contains("--selftest-wording") {
+            setvbuf(stdout, nil, _IONBF, 0)
+            _ = NSApplication.shared
+            let code = MainActor.assumeIsolated { WordingAssistantTests.run() }
+            exit(code)
+        }
         if let index = args.firstIndex(of: "--selftest-ui") {
             setvbuf(stdout, nil, _IONBF, 0)
             isolateDataDirectoryForDiagnostics()

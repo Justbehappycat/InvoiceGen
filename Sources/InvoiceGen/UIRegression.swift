@@ -19,6 +19,7 @@ import AppKit
 /// for looking at layout by eye.
 enum UIRegression {
     private static var failures = 0
+    private static var snapshotDirectory: String?
 
     private static func check(_ label: String, _ ok: Bool, _ detail: String = "") {
         print("  \(ok ? "ok  " : "FAIL") \(label)\(ok || detail.isEmpty ? "" : " — \(detail)")")
@@ -27,6 +28,7 @@ enum UIRegression {
 
     @MainActor
     static func run(snapshotDirectory: String?) -> Int32 {
+        Self.snapshotDirectory = snapshotDirectory
         print("status badge contrast (WCAG AA, 4.5:1):")
         badgeContrast()
         print("preview zoom:")
@@ -60,6 +62,7 @@ enum UIRegression {
         .init(name: "dark", width: 1340, height: 900, dark: true),
         .init(name: "no preview", width: 1340, height: 900, preview: false),
         .init(name: "narrow no preview", width: 900, height: 800, preview: false),
+        .init(name: "wide no preview", width: 1920, height: 1080, preview: false),
         .init(name: "fit page", width: 1340, height: 900, zoom: .fitPage),
         .init(name: "bulk", width: 1340, height: 900, selection: .multiple),
         .init(name: "trashed", width: 1340, height: 900, selection: .trashed),
@@ -101,6 +104,16 @@ enum UIRegression {
         project.contractTotal = 1200
         var first = invoice("12", .sent, dueIn: -5)      // overdue
         first.projectID = project.id
+        first.items += [
+            LineItem(title: "Colour grade", details: "Per finished minute", quantity: 12, price: 200, taxable: false),
+            LineItem(title: "Additional revision round",
+                     details: "Round three of notes from the client, covering the opening titles, a recut of the "
+                            + "interview section, music swaps in acts two and three, and a new end card.\n"
+                            + "Agreed by email on 14 October.",
+                     quantity: 1, price: 150, taxable: false),
+            LineItem(title: "Hard drive", details: "4TB SSD, delivered with masters", quantity: 1, price: 289, taxable: true),
+            LineItem(title: "gfx pkg", details: "lower thirds + endcard", quantity: 1, price: 400, taxable: false),
+        ]
         data.projects = [project]
         data.invoices = [first, invoice("13", .draft, dueIn: 20), invoice("14", .paid, dueIn: 10),
                          invoice("15", .sent, dueIn: 15, trashed: true)]
@@ -242,11 +255,43 @@ enum UIRegression {
                 }
             } else {
                 check("preview hidden when turned off", preview == nil)
+                // The column caps and centres once the pane is wider than the cap.
+                if let editor = pane("invoice-editor"),
+                   let left = nodes.first(where: { $0.role == "AXStaticText" && $0.name == "Invoice number" }),
+                   let right = controls.first(where: { $0.name == "Columns" }) {
+                    let width = right.frame.maxX - left.frame.minX
+                    let limit = Metrics.editorMaxWidth - 2 * Metrics.gutter
+                    check("content no wider than the cap (\(Int(width)) ≤ \(Int(limit)))", width <= limit + 1)
+                    if editor.frame.width > Metrics.editorMaxWidth + 40 {
+                        let leftMargin = left.frame.minX - editor.frame.minX
+                        let rightMargin = editor.frame.maxX - right.frame.maxX
+                        check("content centred (margins \(Int(leftMargin)) / \(Int(rightMargin)))",
+                              abs(leftMargin - rightMargin) < 24)
+                    }
+                    // Every item field stays inside the column, so quantity,
+                    // price and amount sit with the item they belong to.
+                    let itemFields = controls.filter {
+                        $0.role == "AXTextField" && $0.frame.minY > right.frame.maxY
+                            && $0.frame.minX >= left.frame.minX - 2
+                    }
+                    let spill = itemFields.filter { $0.frame.maxX > right.frame.maxX + 2 }
+                    check("item fields stay within the column (\(itemFields.count) checked)", spill.isEmpty,
+                          spill.prefix(3).map { "\(Int($0.frame.minX))–\(Int($0.frame.maxX))" }.joined(separator: ", "))
+                }
             }
         }
 
         // The primary action is reachable whatever is showing.
         check("New Invoice is in the toolbar", controls.contains { $0.name == "New Invoice" })
+
+        if config.name == "laptop" {
+            // Key within this process only -- never activating the app, which
+            // would take the screen from whoever is using it.
+            window.makeKey()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+            focusSurvivesPreviewToggle()
+            suggestionsAreInlineAndNeedAcceptance()
+        }
 
         if config.selection == .trashed {
             check("trashed invoice offers Put Back", controls.contains { $0.name == "Put Back" })
@@ -281,6 +326,102 @@ enum UIRegression {
             }
         }
         return nodes
+    }
+
+    /// Puts the caret in the invoice-number field, presses the toolbar's
+    /// Preview toggle twice, and checks the caret never left the field.
+    @MainActor
+    private static func focusSurvivesPreviewToggle() {
+        let app = AXUIElementCreateApplication(getpid())
+        guard let window = (copy(app, kAXWindowsAttribute) as? [AXUIElement])?.first,
+              let number = find(in: window, { role, _, value in role == "AXTextField" && value == "12" }),
+              let toggle = find(in: window, { role, name, _ in role == "AXCheckBox" && name == "Preview" })
+        else { check("focus test could find its field and the Preview toggle", false); return }
+
+        AXUIElementSetAttributeValue(number, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        func focusedIsNumber() -> Bool {
+            guard let focused = copy(app, kAXFocusedUIElementAttribute) else { return false }
+            let f = focused as! AXUIElement
+            return (copy(f, kAXRoleAttribute) as? String) == "AXTextField"
+                && (copy(f, kAXValueAttribute) as? String) == "12"
+        }
+        let before = focusedIsNumber()
+        check("caret placed in the invoice number", before)
+        guard before else { return }
+        for _ in 0..<2 {
+            AXUIElementPerformAction(toggle, kAXPressAction as CFString)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+        }
+        check("hiding and showing the preview keeps the caret in place", focusedIsNumber())
+    }
+
+    /// End to end, with the real on-device model: Review wording puts a
+    /// suggestion under the line -- no sheet, no dialog -- names its buttons,
+    /// changes nothing until Apply, and Apply writes it.
+    @MainActor
+    private static func suggestionsAreInlineAndNeedAcceptance() {
+        guard OnDeviceAssist.isReady,
+              UserDefaults.standard.object(forKey: "onDeviceAssist") as? Bool ?? true else {
+            print("  (no on-device model here — skipping the live suggestion check)")
+            return
+        }
+        let app = AXUIElementCreateApplication(getpid())
+        guard let window = (copy(app, kAXWindowsAttribute) as? [AXUIElement])?.first,
+              let review = find(in: window, { role, name, _ in role == "AXButton" && name == "Review wording" })
+        else { check("Review wording is in the Items header", false); return }
+        check("Review wording is in the Items header", true)
+
+        let invoiceID = AppStore.shared.data.invoices[0].id
+        func itemTitles() -> [String] { AppStore.shared.invoice(id: invoiceID)?.items.map(\.title) ?? [] }
+        func itemFigures() -> [String] {
+            AppStore.shared.invoice(id: invoiceID)?.items.map { "\($0.quantity)×\($0.price)" } ?? []
+        }
+        let before = itemTitles()
+        let figuresBefore = itemFigures()
+
+        AXUIElementPerformAction(review, kAXPressAction as CFString)
+        var apply: AXUIElement?
+        let deadline = Date().addingTimeInterval(60)
+        while apply == nil, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            apply = find(in: window, { role, name, _ in role == "AXButton" && name == "Apply suggestion" })
+        }
+        guard let apply else { check("a suggestion arrived within 60s", false); return }
+        check("a suggestion arrived inline", true)
+        if let dir = snapshotDirectory, let window = NSApp.windows.first(where: { $0.isVisible }) {
+            UIShot.writePNG(of: window, to: "\(dir)/suggestion.png")
+        }
+
+        let windows = (copy(app, kAXWindowsAttribute) as? [AXUIElement])?.count ?? 0
+        let sheet = find(in: window, { role, _, _ in role == "AXSheet" })
+        check("no sheet or dialog was opened", windows == 1 && sheet == nil)
+        check("Regenerate and Dismiss are named for VoiceOver",
+              find(in: window, { r, n, _ in r == "AXButton" && n == "Regenerate suggestion" }) != nil
+                  && find(in: window, { r, n, _ in r == "AXButton" && n == "Dismiss suggestion" }) != nil)
+        check("nothing in the invoice changed before Apply", itemTitles() == before, "\(itemTitles())")
+
+        AXUIElementPerformAction(apply, kAXPressAction as CFString)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        let after = itemTitles()
+        let changed = zip(before, after).filter { $0 != $1 }
+        check("Apply rewrote exactly one line", changed.count == 1, "\(changed)")
+        check("and left every quantity and price alone", itemFigures() == figuresBefore,
+              "\(figuresBefore) → \(itemFigures())")
+    }
+
+    private static func find(in element: AXUIElement, depth: Int = 0,
+                             _ match: (String, String, String) -> Bool) -> AXUIElement? {
+        guard depth < 60 else { return nil }
+        let role = copy(element, kAXRoleAttribute) as? String ?? ""
+        var name = copy(element, kAXDescriptionAttribute) as? String ?? ""
+        if name.isEmpty { name = copy(element, kAXTitleAttribute) as? String ?? "" }
+        let value = copy(element, kAXValueAttribute).map { "\($0)" } ?? ""
+        if match(role, name, value) { return element }
+        for child in copy(element, kAXChildrenAttribute) as? [AXUIElement] ?? [] {
+            if let hit = find(in: child, depth: depth + 1, match) { return hit }
+        }
+        return nil
     }
 
     private static func copy(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
