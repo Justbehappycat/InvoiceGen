@@ -69,6 +69,8 @@ unconfigured or plain-http address refuses to publish at all.
   item column itself always prints, hidden columns stay editable, and totals
   always use quantity × price.
 - Export PDF (⌘E) or Print (⌘P). Files are named `Invoice_<number>_<due date>.pdf`.
+  Exporting a draft then asks whether to mark it as sent. A save that fails says so,
+  and asks nothing.
 - Long invoices paginate onto real US Letter sheets — line items are never split
   across a page break, continuation pages repeat the column headers, and pages
   are filled with rows before the totals block moves to a sheet of its own.
@@ -103,8 +105,8 @@ unconfigured or plain-http address refuses to publish at all.
   pre-projects file.
 
 **Import a contract** (needs the on-device model — see On-device assist)
-- **Import Contract** at the top of the Projects list (or File ▸ Import
-  Contract…, ⇧⌘I, from anywhere) reads a contract PDF and proposes the client,
+- **✨ Import Contract** at the foot of the sidebar, in every section (or File ▸
+  Import Contract…, ⇧⌘I), reads a contract PDF and proposes the client,
   the project and its whole payment schedule, so a job that arrives as a PDF is
   not typed in by hand. The entry is always there; without the model, the sheet
   says why it can't read one.
@@ -112,6 +114,16 @@ unconfigured or plain-http address refuses to publish at all.
   the invoices go to (a producer, accounts payable) come back separately, and
   fill the client's Business name and Contact name. A client who is a person
   is the client, not a contact, and is never named twice.
+- **Phone and address come from the client's own block.** The app reads them
+  itself, from the lines between the client's name and the other party or the
+  first clause. A signed contract often has the contractor's own number written
+  in, so a number found "somewhere in the document" isn't good enough. A US
+  address is split into street, city, state and zip; one it can't split stays
+  whole on the first line. An email must be an address that is in the contract.
+- **A payment with no date stays undated.** "Payable on delivery" is flagged in
+  the sheet with today as a placeholder. The model's date is kept only if the
+  contract states it within a line of that payment, so an agreement's start date
+  can't pass for a due date.
 - **Read on this Mac.** A contract is the most sensitive thing this app will
   ever open, so it goes to `SystemLanguageModel` and nowhere else. The build
   refuses the Private Cloud Compute model outright.
@@ -123,7 +135,7 @@ unconfigured or plain-http address refuses to publish at all.
 - **Nothing is created until you say so.** Every field arrives editable in a
   review sheet. Creating is one undo step, and a client whose name already
   exists is reused rather than duplicated -- the contract only fills in a
-  contact or email left blank on file, never overwrites one.
+  contact, phone, email or whole address left blank on file, never overwrites one.
 - Long contracts are trimmed to their opening and the paragraphs that mention
   money before they are read. A scanned contract has no text to read, and is
   refused with an explanation rather than handed to the model empty.
@@ -325,6 +337,8 @@ unconfigured or plain-http address refuses to publish at all.
   is discarded rather than shown -- counted, not just collected, so "2 clips"
   turning into "two clips" is caught even when "Episode 2" still holds a 2.
   Quantities, prices, totals, dates and the verification mark never go near it.
+- **Two entries in plain sight.** ✨ Import Contract and ✨ Review Wording sit at
+  the foot of the sidebar; the second works on the open invoice.
 - **It adds nothing you didn't write.** Asked to rewrite more boldly, a model
   this size invents work -- a bare "podcast edit" came back with a voiceover and
   graphics -- so the prompt works from examples, and two rules are enforced in
@@ -334,8 +348,9 @@ unconfigured or plain-http address refuses to publish at all.
 - **It leaves out nothing you did write.** "Podcast package — 1 episode + 2
   social clips" once came back as just "1 episode and 2 social clips". Every
   word you wrote (four letters or more, bar joiners like "plus") has to survive
-  in some form -- "intvw" becoming "interview" counts -- or the suggestion is
-  discarded. The model answers greedily, so the same line gets the same
+  as itself, its expansion ("intvw" -> "interview") or a near-spelling ("socail"
+  -> "social"). "siginal" turning into "signature" is a different word, and the
+  suggestion is discarded. The model answers greedily, so the same line gets the same
   suggestion each time; a suggestion discarded for adding or dropping material
   gets one fresh retry. `INVOICEGEN_WORDING_SAMPLES=1 … --selftest-assist`
   prints the model's answers for a set of sample lines after a prompt change.
@@ -354,8 +369,8 @@ unconfigured or plain-http address refuses to publish at all.
   arrives inline, changes nothing until Apply, and leaves the figures alone.
 
 **Import a contract** (needs the on-device model — see On-device assist)
-- **Import Contract** at the top of the Projects list (or File ▸ Import
-  Contract…, ⇧⌘I, from anywhere) reads a contract PDF and proposes the client,
+- **✨ Import Contract** at the foot of the sidebar, in every section (or File ▸
+  Import Contract…, ⇧⌘I), reads a contract PDF and proposes the client,
   the project and its whole payment schedule, so a job that arrives as a PDF is
   not typed in by hand. The entry is always there; without the model, the sheet
   says why it can't read one.
@@ -363,6 +378,16 @@ unconfigured or plain-http address refuses to publish at all.
   the invoices go to (a producer, accounts payable) come back separately, and
   fill the client's Business name and Contact name. A client who is a person
   is the client, not a contact, and is never named twice.
+- **Phone and address come from the client's own block.** The app reads them
+  itself, from the lines between the client's name and the other party or the
+  first clause. A signed contract often has the contractor's own number written
+  in, so a number found "somewhere in the document" isn't good enough. A US
+  address is split into street, city, state and zip; one it can't split stays
+  whole on the first line. An email must be an address that is in the contract.
+- **A payment with no date stays undated.** "Payable on delivery" is flagged in
+  the sheet with today as a placeholder. The model's date is kept only if the
+  contract states it within a line of that payment, so an agreement's start date
+  can't pass for a due date.
 - **Read on this Mac.** A contract is the most sensitive thing this app will
   ever open, so it goes to `SystemLanguageModel` and nowhere else. The build
   refuses the Private Cloud Compute model outright.
@@ -374,7 +399,7 @@ unconfigured or plain-http address refuses to publish at all.
 - **Nothing is created until you say so.** Every field arrives editable in a
   review sheet. Creating is one undo step, and a client whose name already
   exists is reused rather than duplicated -- the contract only fills in a
-  contact or email left blank on file, never overwrites one.
+  contact, phone, email or whole address left blank on file, never overwrites one.
 - Long contracts are trimmed to their opening and the paragraphs that mention
   money before they are read. A scanned contract has no text to read, and is
   refused with an explanation rather than handed to the model empty.

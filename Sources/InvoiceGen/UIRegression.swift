@@ -222,6 +222,9 @@ enum UIRegression {
         check("icon-only controls have tooltips (\(iconControls.count) found)", silent.isEmpty,
               silent.map(\.name).joined(separator: ", "))
 
+        check("Import Contract is in view", controls.contains { $0.name == "Import Contract" })
+        check("Review Wording is in view", controls.contains { $0.name == "Review Wording" })
+
         let showsEditor = config.section == .invoices && config.selection != .multiple
         if showsEditor {
             check("Export PDF is in the toolbar with its label",

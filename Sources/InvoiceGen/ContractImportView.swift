@@ -112,13 +112,31 @@ struct ContractImportView: View {
                 FormRow(label: "Email") {
                     TextField("Billing email", text: $draft.customerEmail)
                 }
+                FormRow(label: "Phone") {
+                    TextField("Client's phone", text: $draft.customerPhone)
+                }
+                FormRow(label: "Address") {
+                    TextField("Street", text: $draft.customerAddress.line1)
+                }
+                if !draft.customerAddress.line2.isEmpty {
+                    FormRow(label: "") {
+                        TextField("Suite / unit", text: $draft.customerAddress.line2)
+                    }
+                }
+                FormRow(label: "") {
+                    TextField("City", text: $draft.customerAddress.city)
+                    TextField("State", text: $draft.customerAddress.region)
+                        .frame(width: 60)
+                    TextField("Postal code", text: $draft.customerAddress.postalCode)
+                        .frame(width: 90)
+                }
                 FormRow(label: "Project") {
                     TextField("Project name", text: $draft.projectTitle)
                 }
 
                 if existingClient != nil {
                     Label("An existing client with this name will be used. Only "
-                          + "a blank contact or email on file is filled in.",
+                          + "a blank contact, phone, email or address on file is filled in.",
                           systemImage: "person.crop.circle.badge.checkmark")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -133,6 +151,15 @@ struct ContractImportView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if !draft.undated.isEmpty {
+                    Label("The contract gives no date for the flagged payments, "
+                          + "so they show today. Set the real date here or on the project later.",
+                          systemImage: "calendar.badge.exclamationmark")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 if draft.milestones.isEmpty {
                     Text("No payments were found. You can still create the project "
                          + "and add the schedule yourself.")
@@ -144,8 +171,18 @@ struct ContractImportView: View {
                         HStack(spacing: 8) {
                             TextField("Deliverable", text: $milestone.deliverable)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            DatePicker("Due date", selection: $milestone.dueDate,
-                                       displayedComponents: .date)
+                            if draft.undated.contains(milestone.id) {
+                                Image(systemName: "calendar.badge.exclamationmark")
+                                    .foregroundStyle(.secondary)
+                                    .help("Not dated in the contract. Today is only a placeholder.")
+                                    .accessibilityLabel("No date in the contract")
+                            }
+                            DatePicker("Due date", selection: Binding(
+                                get: { milestone.dueDate },
+                                set: {
+                                    milestone.dueDate = $0
+                                    draft.undated.remove(milestone.id)
+                                }), displayedComponents: .date)
                                 .labelsHidden()
                                 .frame(width: 110)
                             DecimalField(placeholder: "0", value: $milestone.amount,
@@ -168,8 +205,8 @@ struct ContractImportView: View {
                 if !draft.discarded.isEmpty {
                     Divider().padding(.vertical, 4)
                     SectionHeader("Not used")
-                    Text("These lines came back without an amount or a date that "
-                         + "could be read, so they were left out:")
+                    Text("These lines came back without an amount that could be "
+                         + "read, so they were left out:")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

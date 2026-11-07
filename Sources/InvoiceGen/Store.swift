@@ -824,6 +824,14 @@ final class AppStore: ObservableObject {
                 if existing.email.isEmpty, !draft.customerEmail.isEmpty {
                     existing.email = draft.customerEmail
                 }
+                if existing.phone.isEmpty, !draft.customerPhone.isEmpty {
+                    existing.phone = draft.customerPhone
+                }
+                // An address is one thing: filled in whole or not at all, so a
+                // street from the contract never sits above a city from before.
+                let onFile = [existing.addressLine1, existing.addressLine2, existing.city,
+                              existing.region, existing.postalCode]
+                if onFile.allSatisfy(\.isEmpty) { existing.apply(draft.customerAddress) }
                 if existing != data.customers[index] {
                     existing.updatedAt = Date()
                     data.customers[index] = existing
@@ -834,6 +842,8 @@ final class AppStore: ObservableObject {
                 customer.name = wanted
                 customer.contactName = draft.customerContact
                 customer.email = draft.customerEmail
+                customer.phone = draft.customerPhone
+                customer.apply(draft.customerAddress)
                 customer.updatedAt = Date()
                 data.customers.append(customer)
                 customerID = customer.id
@@ -1089,5 +1099,15 @@ final class AppStore: ObservableObject {
         vaultStatus = PaymentVault.shared.status
         secretsLoaded = true
         saveNow()
+    }
+}
+
+private extension Customer {
+    mutating func apply(_ address: ContractImport.Address) {
+        addressLine1 = address.line1
+        addressLine2 = address.line2
+        city = address.city
+        region = address.region
+        postalCode = address.postalCode
     }
 }

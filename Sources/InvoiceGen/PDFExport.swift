@@ -49,8 +49,11 @@ enum PDFExporter {
         return output as Data
     }
 
+    /// `afterSaving` runs only once the file is really on disk, and before
+    /// Finder is brought forward, which would otherwise cover anything it shows.
     @MainActor
-    static func exportWithPanel(invoice: Invoice, customer: Customer?, business: BusinessProfile) {
+    static func exportWithPanel(invoice: Invoice, customer: Customer?, business: BusinessProfile,
+                                afterSaving: () -> Void = {}) {
         guard let data = makePDFData(invoice: invoice, customer: customer, business: business) else {
             NSSound.beep()
             return
@@ -60,8 +63,30 @@ enum PDFExporter {
         panel.nameFieldStringValue = suggestedFileName(for: invoice)
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
-            try? data.write(to: url, options: .atomic)
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch {
+                NSAlert(error: error).runModal()
+                return
+            }
+            afterSaving()
             NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    /// Exporting is usually the moment a draft goes out, so offer to record it.
+    /// Asked, never assumed: a PDF saved to check the layout hasn't been sent.
+    /// An invoice already sent or paid isn't asked about.
+    @MainActor
+    static func offerToMarkSent(_ id: UUID, in store: AppStore) {
+        guard store.invoice(id: id)?.status == .draft else { return }
+        let alert = NSAlert()
+        alert.messageText = "Mark this invoice as sent?"
+        alert.informativeText = "The PDF is saved. You can change the status later."
+        alert.addButton(withTitle: "Mark as Sent")
+        alert.addButton(withTitle: "Not Yet")
+        if alert.runModal() == .alertFirstButtonReturn {
+            store.setStatus(.sent, on: id)
         }
     }
 

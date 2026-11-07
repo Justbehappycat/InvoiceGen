@@ -35,6 +35,7 @@ struct SidebarView: View {
     /// app doesn't reopen in the trash.
     @AppStorage("invoiceScope") private var scope: InvoiceScope = .active
     @State private var isImportingContract = false
+    @AppStorage("onDeviceAssist") private var assistEnabled = true
 
     /// Only the two day-to-day sections switch here. Saved items and Settings
     /// live in the bar at the bottom: they are set-up, not daily work.
@@ -61,6 +62,8 @@ struct SidebarView: View {
             default: invoiceList
             }
 
+            Divider()
+            assistBar
             Divider()
             utilityBar
         }
@@ -94,6 +97,51 @@ struct SidebarView: View {
                 .help("New invoice (⌘N)")
             }
         }
+    }
+
+    /// The on-device model's two jobs, always in view whatever the section.
+    /// Sparkles mark everything the model does, here and on its suggestions,
+    /// so the icon is how to find it.
+    private var assistBar: some View {
+        VStack(spacing: 6) {
+            assistButton("Import Contract",
+                         help: "Read a contract PDF into a new project, on this Mac (⇧⌘I)") {
+                isImportingContract = true
+            }
+            if assistEnabled {
+                assistButton("Review Wording", help: reviewHelp) {
+                    focus.wordingReviewRequested = true
+                }
+                .disabled(!canReviewWording)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+    }
+
+    private func assistButton(_ title: String, help: String,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .help(help)
+    }
+
+    private var canReviewWording: Bool {
+        OnDeviceAssist.isReady && section == .invoices && focus.invoiceID != nil
+    }
+
+    private var reviewHelp: String {
+        if let why = OnDeviceAssist.readiness.explanation { return why }
+        return canReviewWording
+            ? "Check every line of this invoice with the model on this Mac. Nothing changes until you apply a suggestion."
+            : "Open an invoice to review its wording."
     }
 
     private var utilityBar: some View {
@@ -452,14 +500,6 @@ struct SidebarView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
-                    // A contract is how most jobs arrive, so importing one is a
-                    // button in plain sight, not an item inside "New". It is
-                    // shown even without the model: the sheet then says why.
-                    Button { isImportingContract = true } label: {
-                        Label("Import Contract", systemImage: "doc.text.magnifyingglass")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Read a contract PDF into a new project (⇧⌘I)")
                     Spacer()
                     Button {
                         let project = store.newProject()
@@ -480,7 +520,7 @@ struct SidebarView: View {
         .overlay {
             if store.data.projects.isEmpty {
                 VStack(spacing: 10) {
-                    Image(systemName: "doc.text.magnifyingglass")
+                    Image(systemName: "sparkles")
                         .font(.system(size: 28))
                         .foregroundStyle(.secondary)
                     Text("No projects yet").font(.headline)
@@ -490,7 +530,6 @@ struct SidebarView: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Import Contract…") { isImportingContract = true }
-                        .buttonStyle(.borderedProminent)
                 }
                 .padding(20)
             }

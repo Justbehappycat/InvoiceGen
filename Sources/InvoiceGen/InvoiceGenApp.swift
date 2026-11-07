@@ -1220,6 +1220,12 @@ struct InvoiceGenApp: App {
             check("dropping what the user wrote is discarded",
                   vetted("Episode 1", "1 episode and 2 social clips",
                          from: "EP1", "Podcast package — 1 episode + 2 social clips").hasPrefix("rejected"))
+            check("a misspelt word can't become a different word",
+                  vetted("First Cut", "For project, harbour, signature, lost",
+                         from: "first cut", "for project harbour siginal lost").hasPrefix("rejected"))
+            check("but it can become the word it meant",
+                  vetted("First Cut", "For project Harbour Signal Lost",
+                         from: "first cut", "for project harbour siginal lost") == "For project Harbour Signal Lost")
             check("expanding shorthand isn't dropping it",
                   vetted("Revision Round 3", "Client notes, including an interview recut and a music swap",
                          from: "rev rd 3", "client notes, recut intvw, swap music")
@@ -1279,6 +1285,8 @@ struct InvoiceGenApp: App {
                         ("ep 5 vo record", "2 hrs studio, mic rental"),
                         ("rev rd 2", "tighten intro, fix audio sync ep3, new captions"),
                         ("Colour grade", "Feature-length grade, 2 review sessions"),
+                ("first cut", "for project harbour siginal lost"),
+                ("gfx pkg", "lower thirds plus endcard"),
                         ("wedding highlight", ""),
                     ]
                     for (t, d) in samples {
@@ -1485,6 +1493,33 @@ struct InvoiceGenApp: App {
             print(failures == 0 ? "all project checks passed" : "\(failures) FAILED")
             exit(failures == 0 ? 0 : 1)
         }
+        // Runs one real contract through the import and prints what it found,
+        // to this terminal only. For checking extraction against a document
+        // that must never become a fixture in this public repo.
+        if let flag = args.firstIndex(of: "--read-contract"), flag + 1 < args.count {
+            setvbuf(stdout, nil, _IONBF, 0)
+            let url = URL(fileURLWithPath: args[flag + 1])
+            nonisolated(unsafe) var result: Result<ContractImport.Draft, Error>?
+            Task {
+                do { result = .success(try await ContractImport.extract(from: try ContractImport.text(fromPDF: url))) }
+                catch { result = .failure(error) }
+            }
+            let deadline = Date().addingTimeInterval(120)
+            while result == nil, Date() < deadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
+            switch result {
+            case .success(let d):
+                print(String(describing: d))
+                exit(0)
+            case .failure(let error):
+                print("failed: \(error.localizedDescription)")
+            case nil:
+                print("timed out")
+            }
+            exit(1)
+        }
+
         if args.contains("--selftest-contract") {
             setvbuf(stdout, nil, _IONBF, 0)
             isolateDataDirectoryForDiagnostics()
@@ -1532,13 +1567,80 @@ struct InvoiceGenApp: App {
                   person.customerName == "Sam Okafor" && person.customerContact.isEmpty)
             let twice = ContractImport.draft(from: .init(clientName: "Sam Okafor", clientContact: "sam okafor"))
             check("the same person isn't named twice", twice.customerContact.isEmpty)
-            check("keeps the two good payments", draft.milestones.count == 2)
+            check("keeps the payments with an amount", draft.milestones.count == 3)
             check("sorted by due date", draft.milestones.first?.deliverable == "Episode 1")
-            check("lists the two it refused", draft.discarded.count == 2)
-            check("total summed from parsed values", draft.contractTotal == 450)
+            check("an undated payment is kept, flagged, and last",
+                  draft.milestones.last?.deliverable == "Wrap"
+                    && draft.undated == [draft.milestones[2].id])
+            check("lists the one it refused", draft.discarded.count == 1)
+            check("total summed from parsed values", draft.contractTotal == 650)
             check("keeps the payment terms", draft.paymentTermDays == 15)
             let silly = ContractImport.draft(from: .init(paymentTermDays: 9000))
             check("absurd terms fall back to 30", silly.paymentTermDays == 30)
+
+            print("contact details and dates are checked against the contract:")
+            // The shape of a real signed contract: both parties' blocks, the
+            // client's number in its own, the contractor's written in later.
+            let signed = """
+            Company: Lantern Road Media LLC
+            Producer: Dana Whitfield
+            Address: 100 Example Ave, Studio City, CA91604
+            Phone: 818-555-0142
+            And
+            Crew Member:
+            Phone:
+            1. Term: begins on or about [10/08/2026].
+            3. Compensation:
+            123 Example St
+            657-555-0199
+            The Company agrees to pay $2,000 upon delivery of the first cut,
+            and $2,000 upon delivery of the final cut.
+            Episode 9 is $700, due 12/04/2026.
+            """
+            let checked = ContractImport.draft(from: .init(
+                clientName: "Lantern Road Media LLC", clientContact: "Dana Whitfield",
+                clientEmail: "657-555-0199",
+                milestones: [
+                    .init(deliverable: "first cut", amount: "2000", dueDate: "2026-10-08"),
+                    .init(deliverable: "final cut", amount: "2000", dueDate: "2026-10-08"),
+                    .init(deliverable: "Episode 9", amount: "700", dueDate: "2026-12-04"),
+                ]), source: signed)
+            check("the client's phone, from the client's block", checked.customerPhone == "818-555-0142")
+            check("the client's address, not the contractor's",
+                  checked.customerAddress == .init(line1: "100 Example Ave", city: "Studio City",
+                                                   region: "CA", postalCode: "91604"))
+            let parse = ContractImport.parseAddress
+            check("an address with no comma before the state",
+                  parse("100 Example Ave, Burbank CA 91502")
+                    == .init(line1: "100 Example Ave", city: "Burbank", region: "CA", postalCode: "91502"))
+            check("a suite keeps its own line",
+                  parse("Address: 100 Example Ave, Suite 4, Burbank, CA 91502-1234")
+                    == .init(line1: "100 Example Ave", line2: "Suite 4", city: "Burbank",
+                             region: "CA", postalCode: "91502-1234"))
+            check("one the app can't split is kept whole",
+                  parse("Address: 1 Example Road, London")
+                    == .init(line1: "1 Example Road, London"))
+            check("an address over two lines is read as one",
+                  ContractImport.address(in: ["Address: 100 Example Ave", "Burbank, CA 91502", "Phone: 818-555-0142"])
+                    == .init(line1: "100 Example Ave", city: "Burbank", region: "CA", postalCode: "91502"))
+            check("an unlabelled line needs a street and a zip to count",
+                  ContractImport.address(in: ["Producer: Dana", "99 problems"]) == .init())
+            check("a phone number is never an email", checked.customerEmail.isEmpty)
+            let invented = ContractImport.draft(from: .init(
+                clientName: "Lantern Road Media LLC", clientEmail: "made@up.example"), source: signed)
+            check("an email not in the contract is dropped", invented.customerEmail.isEmpty)
+            check("the start date isn't taken for a due date", checked.undated.count == 2)
+            check("a date stated beside its payment is kept",
+                  checked.milestones.first?.deliverable == "Episode 9"
+                    && !checked.undated.contains(checked.milestones[0].id))
+            check("undated payments keep the contract's order",
+                  checked.milestones.dropFirst().map(\.deliverable) == ["first cut", "final cut"])
+            check("no phone in the client's block means no phone",
+                  ContractImport.draft(from: .init(clientName: "Nobody Here"), source: signed).customerPhone.isEmpty)
+            check("a date isn't a phone number", ContractImport.phoneNumber(in: "Due 2026-10-30") == nil)
+            check("one line, two parties: only the client's",
+                  ContractImport.partyBlock(of: "Acme", in: "between Acme (818-555-0142) and Sam (657-555-0199)")
+                    .compactMap(ContractImport.phoneNumber(in:)) == ["818-555-0142"])
 
             print("long contracts are trimmed to the parts about money:")
             let boiler = String(repeating: "Boilerplate clause about confidentiality.\n", count: 400)
@@ -1561,12 +1663,22 @@ struct InvoiceGenApp: App {
                 let project = store.importProject(from: draft)
                 check("project made", store.project(id: project.id) != nil)
                 check("named from the contract", project.name == "Night Shift")
-                check("carries the schedule", project.milestones.count == 2)
+                check("carries the schedule", project.milestones.count == 3)
                 check("client created", store.data.customers.count == 1)
                 check("project bills that client",
                       project.customerID == store.data.customers.first?.id)
                 check("with the contact person on file",
                       store.data.customers.first?.contactName == "Dana Whitfield")
+                var located = draft
+                located.customerName = "Harbor Example Co"
+                located.customerAddress = .init(line1: "100 Example Ave", city: "Burbank",
+                                                region: "CA", postalCode: "91502")
+                let placed = store.importProject(from: located)
+                let filed = store.customer(id: placed.customerID)
+                check("and the address on file",
+                      filed?.addressLine1 == "100 Example Ave" && filed?.city == "Burbank"
+                        && filed?.region == "CA" && filed?.postalCode == "91502")
+                store.undo()
                 store.undo()
                 check("one undo removes the project", store.data.projects.isEmpty)
                 check("and the client it made", store.data.customers.isEmpty)
@@ -1583,6 +1695,15 @@ struct InvoiceGenApp: App {
                     store.data.customers[i].contactName = "Typed By Hand"
                 }
                 _ = store.importProject(from: draft)
+                if let i = store.data.customers.firstIndex(where: { $0.id == regular.id }) {
+                    store.data.customers[i].city = "Typed Town"
+                }
+                var moved = draft
+                moved.customerAddress = .init(line1: "100 Example Ave", city: "Burbank")
+                _ = store.importProject(from: moved)
+                check("an address on file is left whole, not mixed with the contract's",
+                      store.customer(id: regular.id)?.city == "Typed Town"
+                        && store.customer(id: regular.id)?.addressLine1.isEmpty == true)
                 check("but a contact on file is never overwritten",
                       store.customer(id: regular.id)?.contactName == "Typed By Hand")
             }
@@ -1597,6 +1718,7 @@ struct InvoiceGenApp: App {
 
             Client: Lantern Road Media LLC
             Billing contact: Dana Whitfield, Producer (dana@lanternroad.example)
+            Phone: 818-555-0142
 
             Contractor shall edit the podcast series "Night Shift" (8 episodes).
 
@@ -1649,6 +1771,8 @@ struct InvoiceGenApp: App {
                     }
                     check("found the client", found.customerName.contains("Lantern Road"))
                     check("found the contact person", found.customerContact.contains("Dana Whitfield"))
+                    check("found the client's phone", found.customerPhone == "818-555-0142")
+                    check("found the client's email", found.customerEmail == "dana@lanternroad.example")
                     check("found all four payments", found.milestones.count == 4)
                     check("totals 1200, summed by the app", found.contractTotal == 1200)
                 case .failure(let error):
@@ -1962,7 +2086,9 @@ struct InvoiceGenApp: App {
             invoice: invoice,
             customer: store.customer(id: invoice.customerID),
             business: store.data.business
-        )
+        ) {
+            PDFExporter.offerToMarkSent(id, in: store)
+        }
     }
 
     private func printFocused() {
@@ -2016,6 +2142,8 @@ final class AppFocus: ObservableObject {
     @Published var requestedSection: SidebarSection?
     /// Set by File ▸ Import Contract…; the sidebar opens the sheet and clears it.
     @Published var contractImportRequested = false
+    /// Set by the sidebar's Review Wording; the open invoice's editor runs it.
+    @Published var wordingReviewRequested = false
 
     var isMultiSelecting: Bool { selectedInvoiceIDs.count > 1 }
 

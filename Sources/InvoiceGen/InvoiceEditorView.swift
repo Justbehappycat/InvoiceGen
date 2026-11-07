@@ -55,6 +55,11 @@ struct InvoiceEditorView: View {
             Text(publishError ?? "")
         }
         .onAppear { focus.invoiceID = invoice.id }
+        .onReceive(focus.$wordingReviewRequested) { requested in
+            guard requested else { return }
+            focus.wordingReviewRequested = false
+            wording.reviewAll(invoice.items, heading: invoice.columns.itemHeading)
+        }
         .alert("Save as template", isPresented: $isNamingTemplate) {
             TextField("Template name", text: $templateName)
             Button("Cancel", role: .cancel) { templateName = "" }
@@ -174,7 +179,9 @@ struct InvoiceEditorView: View {
 
         ToolbarItem(placement: .primaryAction) {
             Button {
-                PDFExporter.exportWithPanel(invoice: invoice, customer: customer, business: business)
+                PDFExporter.exportWithPanel(invoice: invoice, customer: customer, business: business) {
+                    PDFExporter.offerToMarkSent(invoice.id, in: store)
+                }
             } label: {
                 Label("Export PDF", systemImage: "square.and.arrow.down")
                     // The one toolbar action that finishes the job keeps its
@@ -641,7 +648,7 @@ struct InvoiceEditorView: View {
                     Button {
                         wording.reviewAll(invoice.items, heading: invoice.columns.itemHeading)
                     } label: {
-                        Label("Review wording", systemImage: "text.badge.checkmark")
+                        Label("Review wording", systemImage: "sparkles")
                     }
                     .buttonStyle(.borderless)
                     .help("Check every line's wording with the model on this Mac. "

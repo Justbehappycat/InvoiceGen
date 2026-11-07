@@ -154,18 +154,46 @@ enum OnDeviceAssist {
         "and", "with", "plus", "also", "each", "from", "into", "including", "includes", "the", "for",
     ]
 
+    /// Levenshtein distance, for telling a typo fix from a different word.
+    private static func editDistance(_ a: String, _ b: String) -> Int {
+        let a = Array(a), b = Array(b)
+        var row = Array(0...b.count)
+        for i in a.indices {
+            var previous = row[0]
+            row[0] = i + 1
+            for j in b.indices {
+                let current = row[j + 1]
+                row[j + 1] = a[i] == b[j] ? previous : min(previous, row[j], current) + 1
+                previous = current
+            }
+        }
+        return row[b.count]
+    }
+
+    /// Whether `word` survives as `candidate`: the same word, or shorthand for
+    /// it (its letters in order, same first letter: "intvw" -> "interview"), or
+    /// a typo of it (a few letters off: "socail" -> "social").
+    private static func keeps(_ word: String, as candidate: String) -> Bool {
+        guard word.first == candidate.first else { return false }
+        var letters = Substring(word)
+        for letter in candidate where letter == letters.first { letters.removeFirst() }
+        return letters.isEmpty || editDistance(word, candidate) <= max(1, word.count / 3)
+    }
+
     /// The words of `source` (four letters or more) that `result` no longer
-    /// has. A word counts as kept when the result has one starting with the
-    /// same three letters, so expanding shorthand ("intvw" -> "interview")
-    /// and fixing a typo ("socail" -> "social") both pass, while a dropped
-    /// "Podcast package" does not.
+    /// has. Sharing a few letters isn't enough: "siginal" is a typo of "signal",
+    /// and coming back as "signature" is a different word on a client's bill.
+    /// Neighbouring words are tried joined, so "socialmedida" can become
+    /// "social media".
     static func droppedWords(source: String, result: String) -> [String] {
         func words(_ text: String) -> [String] {
             text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
         }
-        let kept = Set(words(result).filter { $0.count >= 3 }.map { String($0.prefix(3)) })
+        let kept = words(result)
+        let joined = zip(kept, kept.dropFirst()).map { $0 + $1 }
         return words(source).filter { word in
-            word.count >= 4 && !connectives.contains(word) && !kept.contains(String(word.prefix(3)))
+            word.count >= 4 && !connectives.contains(word)
+                && !(kept + joined).contains { keeps(word, as: $0) }
         }
     }
 
@@ -214,6 +242,8 @@ enum OnDeviceAssist {
         becomes "2 clips".
         - If a field already reads well, return it unchanged. Fix only \
         what is wrong; never shorten a description by leaving words out.
+        - A phrase stays one phrase: never split it with commas, and never \
+        swap a misspelt word for a different word. Titles keep their words.
         - Add nothing. No services, steps, deliverables or qualities that \
         are not in the input. If the description is empty, return it empty.
         - The name is a short Title Case heading.
@@ -233,6 +263,9 @@ enum OnDeviceAssist {
 
         Name: ep 4 | Description: Promo bundle — 1 trailer + 3 teasers
         -> Name: Episode 4 | Description: Promo bundle: 1 trailer and 3 teasers
+
+        Name: reel 2 | Description: for project blue harbor
+        -> Name: Reel 2 | Description: For project Blue Harbor
 
         Name: gfx pkg | Description: lower thirds + endcard
         -> Name: Graphics Package | Description: Lower thirds and an end card

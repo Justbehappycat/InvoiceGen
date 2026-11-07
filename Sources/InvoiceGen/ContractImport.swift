@@ -24,6 +24,16 @@ import FoundationModels
 ///    the user edits and confirms, and only then is anything created.
 enum ContractImport {
 
+    /// A postal address, split the way a customer record holds one.
+    struct Address: Equatable {
+        var line1 = ""
+        var line2 = ""
+        var city = ""
+        var region = ""
+        var postalCode = ""
+        var isEmpty: Bool { self == Address() }
+    }
+
     /// What the model found, after parsing and validation.
     struct Draft: Equatable {
         /// The company that pays -- or the person, when the client is one.
@@ -32,6 +42,8 @@ enum ContractImport {
         /// who is an individual.
         var customerContact: String = ""
         var customerEmail: String = ""
+        var customerPhone: String = ""
+        var customerAddress = Address()
         var projectTitle: String = ""
         var contractTotal: Decimal = 0
         var paymentTermDays: Int = 30
@@ -39,6 +51,9 @@ enum ContractImport {
         /// Lines the model produced that could not be parsed into a milestone.
         /// Shown to the user rather than silently dropped.
         var discarded: [String] = []
+        /// Payments the contract gives no date for -- "payable on delivery" is
+        /// common. They carry today as a placeholder and the sheet says so.
+        var undated: Set<UUID> = []
     }
 
     enum Failure: LocalizedError {
@@ -171,9 +186,159 @@ enum ContractImport {
         var dueDate = ""
     }
 
+    // MARK: - Checking against the contract (pure)
+
+    private static func firstMatch(_ pattern: String, in text: String) -> String? {
+        guard let range = text.range(of: pattern, options: .regularExpression) else { return nil }
+        return String(text[range])
+    }
+
+    /// A phone number in a line: 10 to 15 digits, so a date or a postcode
+    /// can't pass for one.
+    static func phoneNumber(in line: String) -> String? {
+        guard var found = firstMatch(#"(?<!\d)\+?\(?\d[\d ().-]{8,}\d(?!\d)"#, in: line) else { return nil }
+        // "(818-555-0142)" keeps its digits, not half of its bracket.
+        if found.hasPrefix("("), !found.contains(")") { found.removeFirst() }
+        return (10...15).contains(found.filter(\.isNumber).count) ? found : nil
+    }
+
+    static func emailAddress(in line: String) -> String? {
+        firstMatch(#"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+"#, in: line)
+    }
+
+    private static let stateAndZip = #"\b([A-Za-z]{2})\s*,?\s*(\d{5}(?:-\d{4})?)\s*$"#
+
+    /// "4 Main St, Suite 2, Burbank, CA 91502" -> its parts. Only a US state
+    /// and zip can be split with confidence; anything else stays whole on the
+    /// first line, for the user to see and sort out, rather than being guessed
+    /// into the wrong boxes.
+    static func parseAddress(_ raw: String) -> Address {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let label = text.range(of: #"^(billing\s+)?address\s*[:：]\s*"#,
+                                  options: [.regularExpression, .caseInsensitive]) {
+            text = String(text[label.upperBound...])
+        }
+        guard let match = text.range(of: stateAndZip, options: .regularExpression) else {
+            return Address(line1: text)
+        }
+        let tail = String(text[match]).filter { !$0.isWhitespace && $0 != "," }
+        var address = Address()
+        address.region = String(tail.prefix(2)).uppercased()
+        address.postalCode = String(tail.dropFirst(2))
+
+        var parts = text[..<match.lowerBound].split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return address }
+        if parts.count == 1 {
+            address.line1 = parts[0]
+            return address
+        }
+        address.city = parts.removeLast()
+        address.line1 = parts.removeFirst()
+        address.line2 = parts.joined(separator: ", ")
+        return address
+    }
+
+    /// The address in a party's lines: a labelled one, or an unlabelled line
+    /// that starts with a street number and ends in a zip. A street on one line
+    /// and "City, ST zip" on the next are read together.
+    static func address(in lines: [String]) -> Address {
+        let trimmed = lines.map { $0.trimmingCharacters(in: .whitespaces) }
+        func endsInZip(_ line: String) -> Bool {
+            line.range(of: stateAndZip, options: .regularExpression) != nil
+        }
+        for (index, line) in trimmed.enumerated() {
+            let labelled = line.range(of: #"^(billing\s+)?address\s*[:：]"#,
+                                      options: [.regularExpression, .caseInsensitive]) != nil
+            guard labelled || (line.first?.isNumber == true && endsInZip(line)) else { continue }
+            if !endsInZip(line), index + 1 < trimmed.count, endsInZip(trimmed[index + 1]) {
+                return parseAddress(line + ", " + trimmed[index + 1])
+            }
+            let parsed = parseAddress(line)
+            if !parsed.isEmpty { return parsed }
+        }
+        return Address()
+    }
+
+    /// The lines that belong to one party: from where its name first appears
+    /// to where the other party or the first clause begins. A contract names
+    /// both sides' details in the same shape, and a signed one often has the
+    /// contractor's own number written in, so "a phone number somewhere in the
+    /// document" is not good enough to put on a client's record.
+    static func partyBlock(of name: String, in text: String) -> [String] {
+        guard !name.isEmpty else { return [] }
+        let lines = text.components(separatedBy: .newlines)
+        guard let start = lines.firstIndex(where: { $0.range(of: name, options: .caseInsensitive) != nil })
+        else { return [] }
+
+        func endsBlock(_ line: String) -> Bool {
+            let lowered = line.trimmingCharacters(in: .whitespaces).lowercased()
+            if lowered == "and" { return true }
+            if lowered.range(of: #"^\d+[.)]\s"#, options: .regularExpression) != nil { return true }
+            return ["crew member", "contractor", "independent contractor", "freelancer",
+                    "consultant", "vendor", "artist"].contains { lowered.hasPrefix($0) }
+        }
+
+        // On its own line, only what follows the name and comes before any
+        // "and": "between Acme (555...) and Sam (555...)" is two parties.
+        var first = lines[start]
+        if let name = first.range(of: name, options: .caseInsensitive) {
+            first = String(first[name.upperBound...])
+        }
+        if let and = first.range(of: " and ", options: .caseInsensitive) {
+            first = String(first[..<and.lowerBound])
+        }
+        var block = [first]
+        for line in lines[(start + 1)...].prefix(8) {
+            if endsBlock(line) { break }
+            block.append(line)
+        }
+        return block
+    }
+
+    /// The ways a contract might write this date.
+    private static func spellings(of date: Date) -> [String] {
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        guard let y = parts.year, let m = parts.month, let d = parts.day else { return [] }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let long = formatter.monthSymbols[m - 1], short = formatter.shortMonthSymbols[m - 1]
+        var all = [String(format: "%04d-%02d-%02d", y, m, d)]
+        for (a, b) in [(m, d), (d, m)] {
+            all += [String(format: "%02d/%02d/%04d", a, b, y), "\(a)/\(b)/\(y)",
+                    String(format: "%02d/%02d/%02d", a, b, y % 100)]
+        }
+        for month in [long, short] {
+            all += ["\(month) \(d)", "\(month). \(d)", "\(d) \(month)"]
+        }
+        return all
+    }
+
+    /// Whether the contract states this date beside this payment. The start
+    /// date of an agreement is a real date in the document, and a model asked
+    /// for due dates will happily use it, so appearing somewhere isn't enough:
+    /// it has to be within a line of the deliverable or the amount.
+    static func statesDate(_ date: Date, deliverable: String, amount: Decimal, in text: String) -> Bool {
+        let whole = NSDecimalNumber(decimal: amount).intValue
+        var marks = [deliverable.lowercased(), "$\(whole)"]
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        if let grouped = formatter.string(from: NSNumber(value: whole)) { marks.append("$" + grouped) }
+        let lines = text.lowercased().components(separatedBy: .newlines)
+        let dates = spellings(of: date).map { $0.lowercased() }
+        for (index, line) in lines.enumerated() where marks.contains(where: line.contains) {
+            let nearby = lines[max(0, index - 1)...min(lines.count - 1, index + 1)]
+            if nearby.contains(where: { near in dates.contains(where: near.contains) }) { return true }
+        }
+        return false
+    }
+
     /// Turns the model's text fields into a validated draft. Pure, so the
-    /// self-test can exercise every rejection without a model.
-    static func draft(from extracted: Fields) -> Draft {
+    /// self-test can exercise every rejection without a model. `source` is the
+    /// contract's own text, which contact details and dates are checked against.
+    static func draft(from extracted: Fields, source: String? = nil) -> Draft {
         var draft = Draft()
         draft.customerName = extracted.clientName.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.customerContact = extracted.clientContact.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -186,28 +351,59 @@ enum ContractImport {
         } else if draft.customerContact.caseInsensitiveCompare(draft.customerName) == .orderedSame {
             draft.customerContact = ""
         }
-        draft.customerEmail = extracted.clientEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Read from the client's own block, by the app: a number the model
+        // never handles can't be the wrong party's, or land in the wrong field.
+        // The model's email is the fallback, and only if it is one, and is in
+        // the contract.
+        let lines = source.map { partyBlock(of: draft.customerName, in: $0)
+            + partyBlock(of: draft.customerContact, in: $0) } ?? []
+        draft.customerPhone = lines.lazy.compactMap(phoneNumber(in:)).first ?? ""
+        draft.customerAddress = address(in: lines)
+        let answered = emailAddress(in: extracted.clientEmail) ?? ""
+        draft.customerEmail = lines.lazy.compactMap(emailAddress(in:)).first
+            ?? (source.map { $0.range(of: answered, options: .caseInsensitive) != nil } ?? true ? answered : "")
+
         draft.projectTitle = extracted.projectTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.paymentTermDays = (1...365).contains(extracted.paymentTermDays)
             ? extracted.paymentTermDays : 30
 
         for line in extracted.milestones {
             let deliverable = line.deliverable.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let amount = parseAmount(line.amount),
-                  let date = parseDate(line.dueDate),
-                  !deliverable.isEmpty else {
+            guard let amount = parseAmount(line.amount), !deliverable.isEmpty else {
                 draft.discarded.append(
                     "\(line.deliverable.isEmpty ? "—" : line.deliverable) · "
                     + "\(line.amount.isEmpty ? "no amount" : line.amount) · "
                     + "\(line.dueDate.isEmpty ? "no date" : line.dueDate)")
                 continue
             }
-            draft.milestones.append(Milestone(deliverable: deliverable, amount: amount, dueDate: date))
+            // A real payment with no real date is still a real payment: it is
+            // kept and flagged, not dropped and not given a date from elsewhere.
+            var milestone = Milestone(deliverable: deliverable, amount: amount, dueDate: placeholderDate())
+            if let date = parseDate(line.dueDate),
+               source.map({ statesDate(date, deliverable: deliverable, amount: amount, in: $0) }) ?? true {
+                milestone.dueDate = date
+            } else {
+                draft.undated.insert(milestone.id)
+            }
+            draft.milestones.append(milestone)
         }
-        draft.milestones.sort { $0.dueDate < $1.dueDate }
+        // Dated ones in date order, then the undated in the contract's order.
+        let order = Dictionary(uniqueKeysWithValues: draft.milestones.enumerated().map { ($1.id, $0) })
+        draft.milestones.sort { a, b in
+            let aOpen = draft.undated.contains(a.id), bOpen = draft.undated.contains(b.id)
+            if aOpen != bOpen { return bOpen }
+            if !aOpen, a.dueDate != b.dueDate { return a.dueDate < b.dueDate }
+            return order[a.id, default: 0] < order[b.id, default: 0]
+        }
         // Summed here, from parsed Decimals. The model is never asked for it.
         draft.contractTotal = draft.milestones.reduce(0) { $0 + $1.amount }
         return draft
+    }
+
+    /// Today at noon, matching `parseDate`.
+    private static func placeholderDate() -> Date {
+        Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
     }
 
     // MARK: - The call
@@ -228,7 +424,11 @@ enum ContractImport {
             add a payment that is not written down, and never invent a date.
             - Amounts: digits only, no currency symbol and no thousands \
             separator. "$1,200.00" becomes "1200.00".
-            - Dates: YYYY-MM-DD. If a payment has no date, leave it empty.
+            - Dates: YYYY-MM-DD. If a payment has no date of its own, such as \
+            "payable on delivery", leave it empty. The date of the agreement \
+            and the start date of the work are not due dates.
+            - The email must be the client's own email address, not a phone \
+            number and not the contractor's. Empty if there is none.
             - One milestone per scheduled payment. "Episodes 2-3 — $300" is one \
             milestone, not two.
             - The client is whoever pays, not the contractor being paid: the \
@@ -259,7 +459,7 @@ enum ContractImport {
             paymentTermDays: answer.paymentTermDays,
             milestones: answer.milestones.map {
                 Line(deliverable: $0.deliverable, amount: $0.amount, dueDate: $0.dueDate)
-            }))
+            }), source: contractText)
         guard !draft.customerName.isEmpty || !draft.milestones.isEmpty else {
             throw Failure.nothingFound
         }
@@ -284,7 +484,7 @@ struct RawContract {
     @Guide(description: "The named person at the client company invoices go to. Empty if none is named or the client is an individual.")
     var clientContact: String
 
-    @Guide(description: "The client's billing email. Empty if absent.")
+    @Guide(description: "The client's own billing email address, containing @. Empty if absent.")
     var clientEmail: String
 
     @Guide(description: "The production or project title. Empty if unnamed.")
