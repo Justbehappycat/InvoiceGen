@@ -223,7 +223,6 @@ enum UIRegression {
               silent.map(\.name).joined(separator: ", "))
 
         check("Import Contract is in view", controls.contains { $0.name == "Import Contract" })
-        check("Review Wording is in view", controls.contains { $0.name == "Review Wording" })
 
         let showsEditor = config.section == .invoices && config.selection != .multiple
         if showsEditor {

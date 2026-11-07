@@ -2142,8 +2142,6 @@ final class AppFocus: ObservableObject {
     @Published var requestedSection: SidebarSection?
     /// Set by File ▸ Import Contract…; the sidebar opens the sheet and clears it.
     @Published var contractImportRequested = false
-    /// Set by the sidebar's Review Wording; the open invoice's editor runs it.
-    @Published var wordingReviewRequested = false
 
     var isMultiSelecting: Bool { selectedInvoiceIDs.count > 1 }
 

@@ -337,8 +337,6 @@ unconfigured or plain-http address refuses to publish at all.
   is discarded rather than shown -- counted, not just collected, so "2 clips"
   turning into "two clips" is caught even when "Episode 2" still holds a 2.
   Quantities, prices, totals, dates and the verification mark never go near it.
-- **Two entries in plain sight.** ✨ Import Contract and ✨ Review Wording sit at
-  the foot of the sidebar; the second works on the open invoice.
 - **It adds nothing you didn't write.** Asked to rewrite more boldly, a model
   this size invents work -- a bare "podcast edit" came back with a voiceover and
   graphics -- so the prompt works from examples, and two rules are enforced in

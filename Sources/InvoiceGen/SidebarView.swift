@@ -35,7 +35,6 @@ struct SidebarView: View {
     /// app doesn't reopen in the trash.
     @AppStorage("invoiceScope") private var scope: InvoiceScope = .active
     @State private var isImportingContract = false
-    @AppStorage("onDeviceAssist") private var assistEnabled = true
 
     /// Only the two day-to-day sections switch here. Saved items and Settings
     /// live in the bar at the bottom: they are set-up, not daily work.
@@ -99,49 +98,21 @@ struct SidebarView: View {
         }
     }
 
-    /// The on-device model's two jobs, always in view whatever the section.
-    /// Sparkles mark everything the model does, here and on its suggestions,
-    /// so the icon is how to find it.
+    /// Always in view, whatever the section: a contract is how a job starts.
+    /// Sparkles mark everything the model does, so the icon is how to find it.
     private var assistBar: some View {
-        VStack(spacing: 6) {
-            assistButton("Import Contract",
-                         help: "Read a contract PDF into a new project, on this Mac (⇧⌘I)") {
-                isImportingContract = true
-            }
-            if assistEnabled {
-                assistButton("Review Wording", help: reviewHelp) {
-                    focus.wordingReviewRequested = true
-                }
-                .disabled(!canReviewWording)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-    }
-
-    private func assistButton(_ title: String, help: String,
-                              action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button { isImportingContract = true } label: {
             Label {
-                Text(title)
+                Text("Import Contract")
             } icon: {
                 Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
             }
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
-        .help(help)
-    }
-
-    private var canReviewWording: Bool {
-        OnDeviceAssist.isReady && section == .invoices && focus.invoiceID != nil
-    }
-
-    private var reviewHelp: String {
-        if let why = OnDeviceAssist.readiness.explanation { return why }
-        return canReviewWording
-            ? "Check every line of this invoice with the model on this Mac. Nothing changes until you apply a suggestion."
-            : "Open an invoice to review its wording."
+        .help("Read a contract PDF into a new project, on this Mac (⇧⌘I)")
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
     }
 
     private var utilityBar: some View {

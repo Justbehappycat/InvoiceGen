@@ -55,11 +55,6 @@ struct InvoiceEditorView: View {
             Text(publishError ?? "")
         }
         .onAppear { focus.invoiceID = invoice.id }
-        .onReceive(focus.$wordingReviewRequested) { requested in
-            guard requested else { return }
-            focus.wordingReviewRequested = false
-            wording.reviewAll(invoice.items, heading: invoice.columns.itemHeading)
-        }
         .alert("Save as template", isPresented: $isNamingTemplate) {
             TextField("Template name", text: $templateName)
             Button("Cancel", role: .cancel) { templateName = "" }
