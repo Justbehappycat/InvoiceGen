@@ -17,6 +17,15 @@ struct ContractImportView: View {
     @State private var draft = ContractImport.Draft()
     @State private var sourceName = ""
 
+    init() {}
+
+    /// Opens straight on the review, for `--demo-shots`.
+    init(reviewing draft: ContractImport.Draft, sourceName: String) {
+        _draft = State(initialValue: draft)
+        _sourceName = State(initialValue: sourceName)
+        _stage = State(initialValue: .review)
+    }
+
     enum Stage: Equatable {
         case choosing
         case reading

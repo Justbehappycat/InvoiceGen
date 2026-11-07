@@ -69,6 +69,19 @@ struct InvoiceGenApp: App {
             let code = MainActor.assumeIsolated { UIRegression.run(snapshotDirectory: directory) }
             exit(code)
         }
+        // Screenshots for the README and the website, of real windows showing
+        // made-up data that lives only in memory.
+        if let index = args.firstIndex(of: "--demo-shots"), index + 1 < args.count {
+            setvbuf(stdout, nil, _IONBF, 0)
+            isolateDataDirectoryForDiagnostics()
+            setenv("INVOICEGEN_UI_CHECK", "1", 1)
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.accessory)
+            NSApp.finishLaunching()
+            let directory = args[index + 1]
+            let code = MainActor.assumeIsolated { UIRegression.demoShots(to: directory) }
+            exit(code)
+        }
         if let index = args.firstIndex(of: "--render-ui"), index + 1 < args.count {
             _ = NSApplication.shared
             NSApp.setActivationPolicy(.accessory)

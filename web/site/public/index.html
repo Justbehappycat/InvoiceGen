@@ -77,6 +77,9 @@ h2{font-size:26px; letter-spacing:-.018em; margin:0 0 10px; font-weight:650}
 
 figure.mark{margin:0 0 26px}
 figure.mark img{width:100%; display:block; border:1px solid var(--line); border-radius:var(--radius)}
+figure.mark.narrow{max-width:560px}
+h3.sub{font-size:18px; font-weight:620; margin:30px 0 6px}
+h3.sub + .lede{margin-bottom:18px}
 figure.mark figcaption{font-size:13px; color:var(--faint); margin-top:10px; text-align:center}
 
 .note{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px 24px}
@@ -104,6 +107,7 @@ footer .spacer{flex:1}
   <span class="name">InvoiceGen</span>
   <span class="spacer"></span>
   <a class="lnk hide-sm" href="#features">Features</a>
+  <a class="lnk hide-sm" href="#ai">On-device AI</a>
   <a class="lnk hide-sm" href="#verification">Verification</a>
   <a class="lnk" href="https://github.com/Justbehappycat/InvoiceGen">Source</a>
   <a class="lnk" href="#download">Download</a>
@@ -124,14 +128,18 @@ footer .spacer{flex:1}
 </div></header>
 
 <div class="wrap shot">
-  <img src="assets/screenshot-invoices.png" alt="The InvoiceGen window: invoice list, editor and live preview side by side">
-  <p class="caption">Edit on the left, the finished page on the right — updating as you type.</p>
+  <img src="assets/screenshot-editor.png" alt="The invoice editor beside a live preview of the finished page">
+  <p class="caption">Edit on the left, the finished page on the right — updating as you type. Sample data.</p>
 </div>
 
 <section id="features"><div class="wrap">
   <h2>What it does</h2>
   <p class="lede">Enough to run a freelance practice, and deliberately nothing more.</p>
   <div class="grid">
+    <div class="card"><h3>Projects and payment schedules</h3>
+      <p>One job in one place: the contract total, what's due when, which invoices went out, and what's still owed.</p></div>
+    <div class="card"><h3>Sent, without the bookkeeping</h3>
+      <p>Draft, Sent and Paid, with overdue flagged for you. Export a draft and the app offers to mark it as sent.</p></div>
     <div class="card"><h3>Properly offline</h3>
       <p>No network calls while you work. Your invoices, clients and payment details are files on your disk, not rows in someone else's database.</p></div>
     <div class="card"><h3>Real PDFs</h3>
@@ -145,6 +153,42 @@ footer .spacer{flex:1}
     <div class="card"><h3>Clients in iCloud, optionally</h3>
       <p>Share your customer list across your Macs through iCloud Drive. Invoices and payment details stay local by design.</p></div>
   </div>
+</div></section>
+
+<section id="projects"><div class="wrap">
+  <h2>Every job, and what it still owes</h2>
+  <p class="lede">Film and post work is billed per production, not per invoice. A project keeps the schedule and its invoices together, so what's outstanding is always one look away.</p>
+  <figure class="mark">
+    <img src="assets/project.png" alt="A project with its contract total, money summary, payment schedule and invoices">
+    <figcaption>Sample data, not a real job.</figcaption>
+  </figure>
+</div></section>
+
+<section id="ai"><div class="wrap">
+  <h2>AI that never leaves your Mac</h2>
+  <p class="lede">
+    Two features run on Apple's on-device model, so a contract or a client's name is never uploaded.
+    They need macOS 26 or later with Apple Intelligence turned on. The rest of the app works without them.
+  </p>
+  <h3 class="sub">Import a contract</h3>
+  <p class="lede">
+    Choose a PDF and get the client's company, contact, email, phone and address, the project, and its payment schedule,
+    ready for you to check. Nothing is created until you say so. The app adds up the total itself, and a payment
+    with no date is flagged rather than given one.
+  </p>
+  <figure class="mark narrow">
+    <img src="assets/contract.png" alt="The review sheet: company, contact, email, phone, address, project and payment schedule found in a contract">
+    <figcaption>Read from a sample contract by the on-device model.</figcaption>
+  </figure>
+  <h3 class="sub">Review your wording</h3>
+  <p class="lede">
+    Shorthand becomes something a client can read. Nothing changes until you press Apply, and a suggestion that
+    changes a number, adds work you didn't list, or drops something you wrote is thrown away.
+  </p>
+  <figure class="mark narrow">
+    <img src="assets/wording.png" alt="A suggestion turning &quot;socialmedida clips 2, full clip 1&quot; into &quot;2 social media clips and 1 full clip&quot;">
+    <figcaption>A real suggestion from the on-device model.</figcaption>
+  </figure>
 </div></section>
 
 <section id="verification"><div class="wrap">
@@ -178,7 +222,7 @@ footer .spacer{flex:1}
 <section><div class="wrap">
   <h2>Open source, and checkable</h2>
   <p class="lede">
-    The whole app is a few thousand lines of Swift you can read in an afternoon.
+    The whole app is Swift you can read for yourself, about 15,000 lines of it.
   </p>
   <div class="note">
     <p>

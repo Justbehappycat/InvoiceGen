@@ -1,25 +1,22 @@
 # Landing page
 
 Static page for InvoiceGen. No build step — plain HTML, one stylesheet inline,
-two images. Open `index.html`, or serve the folder:
+and its images. Open `index.html`, or serve the folder:
 
     python3 -m http.server 8787 --directory web/site/public
 
-**Not deployed.** Nothing is published at invoice.finecut.com.
+Published at invoice.finecut.com by running `npx wrangler deploy` in `web/site`.
 
-## The screenshot
+## The screenshots
 
-`public/assets/screenshot-invoices.png` must never be regenerated against the real
-data file: it would put real clients, their email addresses and the business
-address straight onto a public page. Render it against seeded data instead:
+The images in `public/assets/` are published, so they must never show real
+clients, contracts or addresses. Make them from invented data:
 
-    INVOICEGEN_DATA=/tmp/demo/data.json \
-      build/InvoiceGen.app/Contents/MacOS/InvoiceGen \
-      --render-ui web/site/public/assets/screenshot-invoices.png 1440 900 invoices
+    build/InvoiceGen.app/Contents/MacOS/InvoiceGen --demo-shots <folder>
 
-`INVOICEGEN_DATA` is the override the app actually honours. Setting `HOME`
-does **not** work — `NSHomeDirectory()` ignores it and the app reads the real
-file anyway. Always look at the resulting image before committing it.
+That data lives only in memory and never touches the real data file. Always
+look at the resulting images before committing them. See "Screenshots for the
+README and the website" in `docs/DETAILS.md`.
 
 ## Version numbers
 

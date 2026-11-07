@@ -477,3 +477,197 @@ enum UIRegression {
 
     private static func fmt(_ v: Double) -> String { String(format: "%.2f:1", v) }
 }
+
+// MARK: - Screenshots for the README and the website
+
+extension UIRegression {
+    /// Everything shown here is invented and lives only in memory. Anything
+    /// real must stay out: these images are published.
+    @MainActor
+    private static func installDemoData() {
+        let store = AppStore.shared
+        var data = AppData.seeded()
+        data.business.name = "Northlight Post LLC"
+        data.business.phone = "555-555-0123"
+        data.business.email = "hello@example.com"
+        data.business.website = "example.com"
+        data.business.addressLine1 = "100 Example Ave"
+        data.business.city = "Burbank"
+        data.business.region = "CA"
+        data.business.postalCode = "91502"
+        data.business.logoData = nil
+        data.business.paymentMethods = data.business.paymentMethods.map { method in
+            var method = method
+            if method.kind == .zelle { method.set("Recipient name", "NORTHLIGHT POST LLC") }
+            return method
+        }
+
+        var client = Customer()
+        client.name = "Lantern Road Media LLC"
+        client.contactName = "Dana Whitfield"
+        client.email = "accounts@example.com"
+        client.addressLine1 = "200 Sample Street"
+        client.city = "Studio City"; client.region = "CA"; client.postalCode = "91604"
+        var other = Customer()
+        other.name = "Harbour Coffee Roasters"
+        other.email = "hello@example.org"
+        data.customers = [client, other]
+
+        func day(_ offset: Int) -> Date { Calendar.current.date(byAdding: .day, value: offset, to: Date())! }
+        func invoice(_ number: String, _ who: Customer, _ status: InvoiceStatus, due: Int,
+                     _ items: [LineItem]) -> Invoice {
+            var i = Invoice()
+            i.number = number
+            i.customerID = who.id
+            i.status = status
+            i.issueDate = day(due - 14)
+            i.dueDate = day(due)
+            i.items = items
+            if status == .paid { i.amountPaid = i.total }
+            return i
+        }
+        var project = Project()
+        project.name = "Night Shift, Season 1"
+        project.customerID = client.id
+        project.contractTotal = 4000
+
+        var current = invoice("1042", client, .draft, due: 14, [
+            LineItem(title: "Episode 2", details: "socialmedida clips 2, full clip 1",
+                     quantity: 1, price: 1200, taxable: false),
+            LineItem(title: "Colour Grade", details: "Feature-length grade and 2 review sessions",
+                     quantity: 1, price: 800, taxable: false),
+        ])
+        current.projectID = project.id
+        var earlier = invoice("1041", client, .sent, due: 5, [
+            LineItem(title: "Episode 1", details: "1 full episode and 2 social clips",
+                     quantity: 1, price: 2000, taxable: false),
+        ])
+        earlier.projectID = project.id
+        let late = invoice("1039", other, .sent, due: -6, [
+            LineItem(title: "Brand Film", details: "Edit and colour", quantity: 1, price: 1075, taxable: false),
+        ])
+        let settled = invoice("1036", other, .paid, due: -30, [
+            LineItem(title: "Social Cutdowns", details: "6 vertical cuts", quantity: 1, price: 640, taxable: false),
+        ])
+        project.milestones = [
+            { var m = Milestone(deliverable: "Episode 1", amount: 2000, dueDate: day(5)); m.invoiceID = earlier.id; return m }(),
+            { var m = Milestone(deliverable: "Episode 2", amount: 2000, dueDate: day(14)); m.invoiceID = current.id; return m }(),
+        ]
+        data.invoices = [current, earlier, late, settled]
+        data.projects = [project]
+        store.data = data
+    }
+
+    /// Through the window server where this Mac allows screen capture: the only
+    /// way glass, the toolbar and the sidebar selection draw as they really do.
+    /// Without that permission, an offscreen render cropped by `inset` to the
+    /// part such a render gets right. Never asks for the permission.
+    @MainActor
+    private static func shoot(_ window: NSWindow, _ path: String, inset: NSEdgeInsets = .init()) -> Bool {
+        if CGPreflightScreenCaptureAccess() {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            RunLoop.current.run(until: Date().addingTimeInterval(1.0))
+            let tool = Process()
+            tool.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            tool.arguments = ["-x", "-o", "-l\(window.windowNumber)", path]
+            do { try tool.run() } catch { return false }
+            tool.waitUntilExit()
+            return tool.terminationStatus == 0
+        }
+        guard let view = window.contentView?.superview ?? window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+        let crop = CGRect(x: inset.left * scale, y: inset.top * scale,
+                          width: CGFloat(rep.pixelsWide) - (inset.left + inset.right) * scale,
+                          height: CGFloat(rep.pixelsHigh) - (inset.top + inset.bottom) * scale)
+        guard let image = rep.cgImage?.cropping(to: crop),
+              let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        else { return false }
+        return (try? png.write(to: URL(fileURLWithPath: path))) != nil
+    }
+
+    @MainActor
+    static func demoShots(to directory: String) -> Int32 {
+        let restore = UIShot.preservingWindowState()
+        defer { restore() }
+        print(CGPreflightScreenCaptureAccess() ? "capturing real windows"
+              : "no screen capture permission: cropped offscreen renders, without sidebar and toolbar")
+        installDemoData()
+        var ok = true
+        // The sidebar's ideal width and the toolbar's height.
+        let paneOnly = NSEdgeInsets(top: 52, left: 240, bottom: 0, right: 0)
+
+        for (name, section, dark) in [("editor", SidebarSection.invoices, false),
+                                      ("editor-dark", .invoices, true),
+                                      ("project", .projects, false)] {
+            let (window, _) = UIShot.host(.init(name: name, width: 1340, height: 880,
+                                                section: section, dark: dark))
+            ok = shoot(window, "\(directory)/\(name).png", inset: paneOnly) && ok
+            window.orderOut(nil)
+        }
+
+        // Real answers from the real model, not a mock-up of one.
+        if OnDeviceAssist.isReady {
+            let (window, _) = UIShot.host(.init(name: "suggestion", width: 1340, height: 880))
+            _ = readAccessibilityTree()
+            let app = AXUIElementCreateApplication(getpid())
+            if let ax = (copy(app, kAXWindowsAttribute) as? [AXUIElement])?.first,
+               let review = find(in: ax, { role, name, _ in role == "AXButton" && name == "Review wording" }) {
+                AXUIElementPerformAction(review, kAXPressAction as CFString)
+                var apply: AXUIElement?
+                let deadline = Date().addingTimeInterval(60)
+                while apply == nil, Date() < deadline {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+                    apply = find(in: ax, { r, n, _ in r == "AXButton" && n == "Apply suggestion" })
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(1.0))
+                ok = apply != nil && shoot(window, "\(directory)/suggestion.png", inset: paneOnly) && ok
+            } else { ok = false }
+            window.orderOut(nil)
+
+            let contract = """
+            FILM EDITOR AGREEMENT
+            Company: Lantern Road Media LLC
+            Producer: Dana Whitfield
+            Address: 200 Sample Street, Studio City, CA 91604
+            Phone: 818-555-0142
+            Email: accounts@example.com
+            And
+            Crew Member: Sam Example
+            1. Engagement: editing services on the film "Night Shift".
+            2. Term: begins on or about 11/20/2026.
+            3. Compensation: The Company agrees to pay a flat fee of $4,000.
+            $2,000 is payable upon delivery of the first cut, and
+            $2,000 is payable upon delivery of the final cut.
+            Invoices are payable net 30.
+            """
+            nonisolated(unsafe) var found: ContractImport.Draft?
+            Task { found = try? await ContractImport.extract(from: contract) }
+            let deadline = Date().addingTimeInterval(90)
+            while found == nil, Date() < deadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            if let found {
+                let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 620),
+                                     styleMask: [.titled], backing: .buffered, defer: false)
+                sheet.title = "Import a contract"
+                sheet.appearance = NSAppearance(named: .aqua)
+                sheet.contentView = NSHostingView(rootView:
+                    ContractImportView(reviewing: found, sourceName: "Editor Agreement.pdf")
+                        .environmentObject(AppStore.shared)
+                        .environmentObject(AppFocus()))
+                sheet.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
+                sheet.orderFrontRegardless()
+                RunLoop.current.run(until: Date().addingTimeInterval(1.0))
+                ok = shoot(sheet, "\(directory)/contract.png", inset: .init(top: 28, left: 0, bottom: 0, right: 0)) && ok
+                sheet.orderOut(nil)
+            } else { ok = false }
+        } else {
+            print("no on-device model: skipped the suggestion and contract shots")
+        }
+        print(ok ? "demo shots written" : "some demo shots FAILED")
+        return ok ? 0 : 1
+    }
+}
