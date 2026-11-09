@@ -855,6 +855,12 @@ final class AppStore: ObservableObject {
         project.customerID = customerID
         project.contractTotal = draft.contractTotal
         project.milestones = draft.milestones
+        if !draft.rates.isEmpty {
+            let code = data.business.currencyCode
+            project.notes = "Rates from the contract, billed for time worked:\n"
+                + draft.rates.map { "• " + ContractImport.describe($0, currency: code) }
+                    .joined(separator: "\n")
+        }
         data.projects.insert(project, at: 0)
 
         commitHistory()

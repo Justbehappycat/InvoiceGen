@@ -1655,6 +1655,57 @@ struct InvoiceGenApp: App {
                   ContractImport.partyBlock(of: "Acme", in: "between Acme (818-555-0142) and Sam (657-555-0199)")
                     .compactMap(ContractImport.phoneNumber(in:)) == ["818-555-0142"])
 
+            print("a deal memo: a day rate, a flat fee, the address in a sentence:")
+            let memo = ContractImport.dealMemoSample
+            // What the model really did with a memo shaped like this: the
+            // address as the contact, the rate as the payment, the fee lost.
+            let misread = ContractImport.draft(from: .init(
+                clientName: "Northlight Post LLC",
+                clientContact: "200 Example Blvd, Suite 5, Glendale, CA 91203",
+                projectTitle: "Harbour Lights", paymentTermDays: 15,
+                milestones: [.init(deliverable: "selects reel", amount: "350", dueDate: "")]),
+                source: memo)
+            check("an address is never a contact", misread.customerContact.isEmpty)
+            check("the address read from the sentence",
+                  misread.customerAddress == .init(line1: "200 Example Blvd", line2: "Suite 5",
+                                                   city: "Glendale", region: "CA", postalCode: "91203"))
+            check("the day rate is a rate, not a payment",
+                  misread.rates == [.init(amount: 350, unit: "day")])
+            check("the flat fee beside it is found",
+                  misread.milestones.map(\.amount) == [1800]
+                    && misread.milestones.first?.deliverable == "selects reel")
+            check("and the total is the fee alone", misread.contractTotal == 1800)
+            check("the contractor's phone and email stay out",
+                  misread.customerPhone.isEmpty && misread.customerEmail.isEmpty)
+            let wellRead = ContractImport.draft(from: .init(
+                clientName: "Northlight Post LLC",
+                milestones: [.init(deliverable: "Selects reel", amount: "1800", dueDate: "")],
+                rates: [.init(amount: "350", unit: "day")]), source: memo)
+            check("read right, nothing is doubled",
+                  wellRead.rates.count == 1 && wellRead.milestones.count == 1)
+            check("the contractor's email, offered as the client's, is refused",
+                  ContractImport.draft(from: .init(clientName: "Northlight Post LLC",
+                                                   clientEmail: "crew@example.com"),
+                                       source: memo).customerEmail.isEmpty)
+            check("an email written beside the client is kept",
+                  ContractImport.draft(from: .init(clientName: "Acme Example Co",
+                                                   clientEmail: "pay@acme.example"),
+                                       source: "Agreement with Acme Example Co.\nInvoices to pay@acme.example\n")
+                    .customerEmail == "pay@acme.example")
+            let rateUnits = { ContractImport.rateUnits(of: $0, in: $1) }
+            check("$75/hr is hourly", rateUnits(75, "Editing at $75/hr, billed weekly.") == ["hour"])
+            check("a day rate of $500", rateUnits(500, "Contractor's day rate of $500 applies.") == ["day"])
+            check("$2,000 on delivery is not a rate",
+                  rateUnits(2000, "The Company agrees to pay $2,000 upon delivery of the first cut.") == [nil])
+            check("a rate the contract doesn't state is dropped",
+                  ContractImport.draft(from: .init(rates: [.init(amount: "999", unit: "day")]),
+                                       source: memo).rates.isEmpty)
+            check("no rate, no fee hunting: a schedule stays the model's",
+                  ContractImport.draft(from: .init(clientName: "Northlight Post LLC"),
+                                       source: memo).milestones.isEmpty)
+            check("a name is a contact", ContractImport.looksLikeName("Dana Whitfield"))
+            check("a phone number is not", !ContractImport.looksLikeName("818-555-0142"))
+
             print("long contracts are trimmed to the parts about money:")
             let boiler = String(repeating: "Boilerplate clause about confidentiality.\n", count: 400)
             let long = "Agreement between Lantern Road Media and the Contractor.\n" + boiler
@@ -1719,6 +1770,12 @@ struct InvoiceGenApp: App {
                         && store.customer(id: regular.id)?.addressLine1.isEmpty == true)
                 check("but a contact on file is never overwritten",
                       store.customer(id: regular.id)?.contactName == "Typed By Hand")
+                var hourly = draft
+                hourly.rates = [.init(amount: 350, unit: "day")]
+                let timed = store.importProject(from: hourly)
+                check("a rate goes in the project's notes",
+                      timed.notes.contains("per day") && timed.notes.contains("350"))
+                check("and not in its total", timed.contractTotal == draft.contractTotal)
             }
 
             print("reading a real PDF:")
@@ -1792,6 +1849,35 @@ struct InvoiceGenApp: App {
                     check("extraction answered (\(error.localizedDescription))", false)
                 case nil:
                     check("extraction answered within 120s", false)
+                }
+
+                print("on-device extraction of a deal memo (live):")
+                nonisolated(unsafe) var memoLive: Result<ContractImport.Draft, Error>?
+                Task {
+                    do { memoLive = .success(try await ContractImport.extract(from: ContractImport.dealMemoSample)) }
+                    catch { memoLive = .failure(error) }
+                }
+                let memoDeadline = Date().addingTimeInterval(120)
+                while memoLive == nil, Date() < memoDeadline {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+                }
+                switch memoLive {
+                case .success(let found):
+                    print("    client: \(found.customerName)   contact: \(found.customerContact)   project: \(found.projectTitle)")
+                    for m in found.milestones { print("    \(m.deliverable)  \(m.amount)") }
+                    for r in found.rates { print("    rate \(r.amount) per \(r.unit)") }
+                    print("    phone: \(found.customerPhone)   email: \(found.customerEmail)")
+                    check("memo: found the client", found.customerName.contains("Northlight"))
+                    check("memo: no address or number as the contact", ContractImport.looksLikeName(found.customerContact))
+                    check("memo: the client's address", found.customerAddress.postalCode == "91203")
+                    check("memo: the day rate", found.rates == [.init(amount: 350, unit: "day")])
+                    check("memo: the flat fee is the only payment", found.milestones.map(\.amount) == [1800])
+                    check("memo: none of the contractor's details",
+                          found.customerPhone.isEmpty && found.customerEmail.isEmpty)
+                case .failure(let error):
+                    check("memo extraction answered (\(error.localizedDescription))", false)
+                case nil:
+                    check("memo extraction answered within 120s", false)
                 }
             } else {
                 print("  (no on-device model here — skipping the live extraction)")

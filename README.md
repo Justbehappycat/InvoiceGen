@@ -40,6 +40,7 @@ Click **✨ Import Contract** at the bottom of the sidebar, or press ⇧⌘I, an
 - It finds the client company, contact person, email, phone and address, plus the project and each payment.
 - The app does the arithmetic itself, and a total never comes from the model.
 - A payment with no date, such as "payable on delivery", is flagged for you to date.
+- A day or hourly rate is kept apart from the payments and saved in the project's notes, while a flat fee next to it becomes a payment.
 - The PDF needs real text. A scanned contract needs OCR first.
 
 ### Review wording

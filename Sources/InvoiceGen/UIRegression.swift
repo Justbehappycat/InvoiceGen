@@ -664,6 +664,29 @@ extension UIRegression {
                 ok = shoot(sheet, "\(directory)/contract.png", inset: .init(top: 28, left: 0, bottom: 0, right: 0)) && ok
                 sheet.orderOut(nil)
             } else { ok = false }
+
+            // The deal-memo shape: a day rate beside a flat fee.
+            nonisolated(unsafe) var memo: ContractImport.Draft?
+            Task { memo = try? await ContractImport.extract(from: ContractImport.dealMemoSample) }
+            let memoDeadline = Date().addingTimeInterval(90)
+            while memo == nil, Date() < memoDeadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            if let memo {
+                let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 700),
+                                     styleMask: [.titled], backing: .buffered, defer: false)
+                sheet.title = "Import a contract"
+                sheet.appearance = NSAppearance(named: .aqua)
+                sheet.contentView = NSHostingView(rootView:
+                    ContractImportView(reviewing: memo, sourceName: "Deal Memo.pdf")
+                        .environmentObject(AppStore.shared)
+                        .environmentObject(AppFocus()))
+                sheet.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
+                sheet.orderFrontRegardless()
+                RunLoop.current.run(until: Date().addingTimeInterval(1.0))
+                ok = shoot(sheet, "\(directory)/contract-rates.png", inset: .init(top: 28, left: 0, bottom: 0, right: 0)) && ok
+                sheet.orderOut(nil)
+            } else { ok = false }
         } else {
             print("no on-device model: skipped the suggestion and contract shots")
         }

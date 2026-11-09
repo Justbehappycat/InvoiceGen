@@ -118,7 +118,17 @@ unconfigured or plain-http address refuses to publish at all.
   first clause. A signed contract often has the contractor's own number written
   in, so a number found "somewhere in the document" isn't good enough. A US
   address is split into street, city, state and zip; one it can't split stays
-  whole on the first line. An email must be an address that is in the contract.
+  whole on the first line. An address written into a sentence ("principal place
+  of business at …") is read too, from what follows the client's name only.
+  An email the model offers must be written within two lines of the client's
+  name or contact, so the contractor's own email is never taken for theirs. A
+  contact with digits or an @ in it is not a person, and is left out.
+- **Rates are not payments.** "$500 per day", "$75/hr" or "a day rate of $500"
+  has nothing due until the time is worked, so it is shown above the schedule,
+  kept out of the total, and saved in the project's notes. The app checks the
+  contract's own wording, so a rate the model listed as a payment is moved, and
+  a flat fee written beside a rate ("$500/day + $3,000 flat fee") is kept as a
+  payment even when the model misses it.
 - **A payment with no date stays undated.** "Payable on delivery" is flagged in
   the sheet with today as a placeholder. The model's date is kept only if the
   contract states it within a line of that payment, so an agreement's start date

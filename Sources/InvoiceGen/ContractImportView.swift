@@ -160,6 +160,32 @@ struct ContractImportView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                // A rate has no amount due until the time is worked, so it sits
+                // above the schedule, outside the total, and goes in the notes.
+                ForEach(draft.rates, id: \.self) { rate in
+                    HStack(spacing: 8) {
+                        Label {
+                            Text("Plus \(ContractImport.describe(rate, currency: store.data.business.currencyCode))")
+                                .fontWeight(.medium)
+                            + Text(", billed for the time worked. Not in this total; saved in the project's notes.")
+                                .foregroundColor(.secondary)
+                        } icon: {
+                            Image(systemName: "clock")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button(role: .destructive) {
+                            draft.rates.removeAll { $0 == rate }
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove rate")
+                    }
+                }
+
                 if !draft.undated.isEmpty {
                     Label("The contract gives no date for the flagged payments, "
                           + "so they show today. Set the real date here or on the project later.",
