@@ -226,9 +226,9 @@ struct ProjectDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    ForEach($project.milestones) { $milestone in
+                    ForEach(project.milestones) { milestone in
                         MilestoneRow(
-                            milestone: $milestone,
+                            milestone: $project.milestones.element(milestone),
                             currency: currency,
                             invoice: store.billedInvoice(for: milestone),
                             onInvoice: {

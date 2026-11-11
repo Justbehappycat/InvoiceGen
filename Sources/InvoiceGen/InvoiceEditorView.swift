@@ -688,9 +688,9 @@ struct InvoiceEditorView: View {
                 }
                 .font(.caption)
 
-                ForEach($invoice.items) { $item in
+                ForEach(invoice.items) { item in
                     LineItemRow(
-                        item: $item,
+                        item: $invoice.items.element(item),
                         currencyCode: invoice.currencyCode,
                         itemHeading: invoice.columns.itemHeading,
                         canDelete: invoice.items.count > 1,

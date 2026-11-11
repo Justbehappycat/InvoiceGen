@@ -78,3 +78,24 @@ extension Color {
         return Color(nsColor: adjusted)
     }
 }
+
+extension Binding where Value: MutableCollection, Value.Element: Identifiable {
+    /// One element of a list, found by its identity on every read and write.
+    ///
+    /// `ForEach($list)` binds each row by position, and a row outlives its
+    /// element for a moment: SwiftUI runs its disappearing and focus-change
+    /// work after the list has already shrunk, and reading position 4 of a
+    /// list now 1 long traps. Found by id instead, a row whose element is gone
+    /// reads its last copy and its writes go nowhere.
+    func element(_ element: Value.Element) -> Binding<Value.Element> {
+        let id = element.id
+        return Binding<Value.Element>(
+            get: { wrappedValue.first { $0.id == id } ?? element },
+            set: { newValue in
+                if let index = wrappedValue.firstIndex(where: { $0.id == id }) {
+                    wrappedValue[index] = newValue
+                }
+            }
+        )
+    }
+}

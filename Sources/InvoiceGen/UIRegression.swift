@@ -49,8 +49,51 @@ enum UIRegression {
             window.orderOut(nil)
         }
 
+        print("lines that go away mid-edit:")
+        linesCanVanish()
+
         print(failures == 0 ? "all UI checks passed" : "\(failures) UI checks FAILED")
         return failures == 0 ? 0 : 1
+    }
+
+    /// A line row outlives its line for a moment: SwiftUI runs its
+    /// disappearing work after the array has already shrunk. Reading the line
+    /// by its old position then traps -- the crash 0.17.3 shipped with, on
+    /// moving from a long invoice to a short one. If this regresses the suite
+    /// does not fail politely: the process dies here.
+    @MainActor
+    private static func linesCanVanish() {
+        let store = AppStore.shared
+        let live = store.data.invoices.filter { !$0.isTrashed }
+        guard let long = live.max(by: { $0.items.count < $1.items.count }),
+              let short = live.first(where: { $0.items.count < long.items.count }) else {
+            check("the fixture has a long and a short invoice", false); return
+        }
+        let focus = AppFocus()
+        focus.invoiceID = long.id
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 900),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: ContentView(initialSection: .invoices)
+            .environmentObject(store).environmentObject(focus))
+        window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
+        window.orderFrontRegardless()
+        func settle() { RunLoop.current.run(until: Date().addingTimeInterval(0.6)) }
+        settle()
+
+        focus.invoiceID = short.id
+        settle()
+        check("moving from a \(long.items.count)-line invoice to a \(short.items.count)-line one", true)
+
+        focus.invoiceID = long.id
+        settle()
+        if let i = store.data.invoices.firstIndex(where: { $0.id == long.id }) {
+            store.data.invoices[i].items.removeLast(long.items.count - 1)
+        }
+        settle()
+        check("removing lines from the open invoice", true)
+        store.data.invoices = store.data.invoices.map { $0.id == long.id ? long : $0 }
+        settle()
+        window.orderOut(nil)
     }
 
     // MARK: - Configurations
