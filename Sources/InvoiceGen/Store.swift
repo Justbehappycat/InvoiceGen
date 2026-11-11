@@ -147,10 +147,17 @@ final class AppStore: ObservableObject {
     // MARK: - Storage
 
     static func defaultFileURL() -> URL {
-        if let override = ProcessInfo.processInfo.environment["INVOICEGEN_DATA"], !override.isEmpty {
-            return URL(fileURLWithPath: override)
+        let environment = ProcessInfo.processInfo.environment
+        let url = environment["INVOICEGEN_DATA"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            ?? realDataURL()
+        // A tripwire, not a convenience: a self-test that reaches the real
+        // folder stops here, before it can read, write or delete anything.
+        if environment["INVOICEGEN_SELFTEST"] != nil,
+           url.standardizedFileURL.deletingLastPathComponent().path
+            == realDataURL().standardizedFileURL.deletingLastPathComponent().path {
+            fatalError("a self-test reached the real data folder")
         }
-        return realDataURL()
+        return url
     }
 
     /// Where the user's own data lives, whatever INVOICEGEN_DATA says.
@@ -795,6 +802,39 @@ final class AppStore: ObservableObject {
         }
         commitHistory()
         return made
+    }
+
+    /// Bills every unbilled milestone on ONE invoice, a line each, for a
+    /// client who wants a single bill for the job. Every milestone is marked
+    /// billed by it, so trashing or destroying the invoice frees them all
+    /// again. Due on the latest of their dates: nothing is asked for before
+    /// the contract says it is owed. One history step.
+    @discardableResult
+    func createCombinedInvoiceForUnbilled(inProject projectID: UUID) -> Invoice? {
+        guard let projectIndex = data.projects.firstIndex(where: { $0.id == projectID })
+        else { return nil }
+        let pending = data.projects[projectIndex].milestones
+            .filter { needsInvoicing($0) }
+            .sorted { $0.dueDate < $1.dueDate }
+        guard let latest = pending.last else { return nil }
+
+        commitHistory()
+        var invoice = newInvoice(customerID: data.projects[projectIndex].customerID)
+        invoice.projectID = projectID
+        invoice.dueDate = latest.dueDate
+        invoice.items = pending.map {
+            LineItem(title: $0.deliverable, details: "", quantity: 1, price: $0.amount, taxable: false)
+        }
+        if let index = data.invoices.firstIndex(where: { $0.id == invoice.id }) {
+            data.invoices[index] = invoice
+        }
+        let billed = Set(pending.map(\.id))
+        for m in data.projects[projectIndex].milestones.indices
+        where billed.contains(data.projects[projectIndex].milestones[m].id) {
+            data.projects[projectIndex].milestones[m].invoiceID = invoice.id
+        }
+        commitHistory()
+        return invoice
     }
 
     /// Creates the job a contract describes: the client if they are new, the

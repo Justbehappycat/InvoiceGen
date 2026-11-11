@@ -20,6 +20,12 @@ private func waitForSecrets(_ store: AppStore, timeout: TimeInterval = 20) {
 /// perfectly good vault. So every diagnostic that writes gets its own throwaway
 /// data directory unless the caller has deliberately named one.
 private func isolateDataDirectoryForDiagnostics() {
+    // Keychain items and the data file move together: a test folder with the
+    // real vault key and fingerprint is how a test once deleted real ones.
+    if ProcessInfo.processInfo.environment["INVOICEGEN_SELFTEST"] == nil {
+        setenv("INVOICEGEN_SELFTEST", UUID().uuidString, 1)
+        atexit { Keychain.clearSelfTestItems() }
+    }
     guard ProcessInfo.processInfo.environment["INVOICEGEN_DATA"] == nil else { return }
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("invoicegen-selftest-\(UUID().uuidString)", isDirectory: true)
@@ -37,6 +43,12 @@ struct InvoiceGenApp: App {
     init() {
         // Headless render used for checking PDF output: InvoiceGen --render-sample out.pdf
         let args = CommandLine.arguments
+        // Every self-test runs in a throwaway folder with throwaway Keychain
+        // items, decided here once rather than remembered by each suite: the
+        // vault suite once forgot, and deleted the real payment vault.
+        if args.contains(where: { $0.hasPrefix("--selftest-") }) {
+            isolateDataDirectoryForDiagnostics()
+        }
         // For checking the live app in both themes without flipping the whole
         // Mac's appearance: InvoiceGen --appearance dark|light. Offscreen
         // renders can't stand in for this -- the sidebar selection and the bar
@@ -331,6 +343,9 @@ struct InvoiceGenApp: App {
                 print("undo stack stayed empty:", store.canUndo ? "NO — FAILED" : "yes")
 
                 store.saveNow()
+                print("after saving: \(store.vaultStatus.message) vault file: "
+                      + "\(FileManager.default.fileExists(atPath: vaultURL.path)), key in: \(Keychain.keySource), "
+                      + "unprotected: \(store.secretsUnprotected)")
                 if let raw = try? String(contentsOf: store.storageURL, encoding: .utf8) {
                     let leaked = store.data.business.paymentMethods
                         .flatMap { $0.fields.map { $0.value } }
@@ -1410,6 +1425,35 @@ struct InvoiceGenApp: App {
                       store.invoices(inProject: projectID).count == 1)
                 check("and unbills their milestones",
                       store.data.projects[0].milestones.filter { $0.isInvoiced }.count == 1)
+
+                print("or all of them on one invoice:")
+                let pendingBefore = store.data.projects[0].milestones.filter { store.needsInvoicing($0) }
+                let combined = store.createCombinedInvoiceForUnbilled(inProject: projectID)
+                check("one invoice made", combined != nil
+                        && store.invoices(inProject: projectID).count == 2)
+                check("a line for each unbilled payment, in date order",
+                      combined?.items.map(\.title)
+                        == pendingBefore.sorted { $0.dueDate < $1.dueDate }.map(\.deliverable))
+                check("totalling them", combined?.subtotal == pendingBefore.reduce(0) { $0 + $1.amount })
+                check("due on the latest of their dates",
+                      combined?.dueDate == pendingBefore.map(\.dueDate).max())
+                check("every payment is billed by it",
+                      store.data.projects[0].milestones.allSatisfy { !store.needsInvoicing($0) })
+                check("invoiced the whole contract, once",
+                      store.totals(forProject: projectID).invoiced == 1200)
+                check("nothing left to combine",
+                      store.createCombinedInvoiceForUnbilled(inProject: projectID) == nil)
+                if let combined {
+                    store.deleteInvoice(id: combined.id)
+                    check("trashing it frees every payment it billed",
+                          store.data.projects[0].milestones.filter { store.needsInvoicing($0) }.count
+                            == pendingBefore.count)
+                    store.undo()
+                }
+                store.undo()
+                check("one undo takes the combined invoice back",
+                      store.invoices(inProject: projectID).count == 1
+                        && store.data.projects[0].milestones.filter { $0.isInvoiced }.count == 1)
 
                 print("trashed invoices stop counting, archived ones don't:")
                 _ = store.createInvoicesForUnbilled(inProject: projectID)

@@ -78,20 +78,33 @@ struct ProjectDetailView: View {
         }
         .liquidGlassBar()
         .confirmationDialog(
-            "Create \(unbilled.count) draft invoice\(unbilled.count == 1 ? "" : "s")?",
+            unbilled.count == 1
+                ? "Create a draft invoice?"
+                : "Invoice \(unbilled.count) unbilled payments?",
             isPresented: $confirmBillAll, titleVisibility: .visible
         ) {
-            Button("Create Drafts") {
+            Button(unbilled.count == 1 ? "Create Draft" : "\(unbilled.count) Separate Invoices") {
                 let made = store.createInvoicesForUnbilled(inProject: project.id)
                 if let first = made.first {
                     focus.invoiceID = first.id
                     focus.requestedSection = .invoices
                 }
             }
+            if unbilled.count > 1 {
+                Button("One Invoice, a Line Each") {
+                    if let made = store.createCombinedInvoiceForUnbilled(inProject: project.id) {
+                        focus.invoiceID = made.id
+                        focus.requestedSection = .invoices
+                    }
+                }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("They are created as drafts, oldest due date first. Nothing is sent, "
-                 + "and ⌘Z undoes the whole batch in one step.")
+            Text(unbilled.count == 1
+                 ? "It is created as a draft. Nothing is sent, and ⌘Z undoes it."
+                 : "Separate invoices are created oldest due date first. One invoice "
+                   + "lists every payment as its own line and is due on the latest date. "
+                   + "Either way they are drafts, nothing is sent, and ⌘Z undoes it in one step.")
         }
     }
 

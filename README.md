@@ -23,7 +23,7 @@ Works in light and dark, and also has saved items, templates, bulk edits, archiv
 
 ## Projects
 
-One job, its schedule, and what it still owes. Turn a scheduled payment into an invoice when it's due.
+One job, its schedule, and what it still owes. Turn a scheduled payment into an invoice when it's due, or bill every unbilled payment at once, as separate invoices or as one invoice with a line for each.
 
 ![A project with its contract total, money summary, payment schedule and invoices](docs/images/project.png)
 

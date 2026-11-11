@@ -6,7 +6,15 @@ import CryptoKit
 /// the integrity fingerprint lives there too — a process that can write your
 /// files still cannot rewrite the Keychain without your login.
 enum Keychain {
-    private static let service = "com.finecut.invoicegen"
+    /// Self-tests get their own items, so a test that resets the vault can
+    /// never reach the real key or fingerprint -- and their own per run: an
+    /// item made by an earlier build can't be read or deleted by this one,
+    /// because Keychain access follows the code signature.
+    private static var service: String {
+        guard let run = ProcessInfo.processInfo.environment["INVOICEGEN_SELFTEST"], !run.isEmpty
+        else { return "com.finecut.invoicegen" }
+        return "com.finecut.invoicegen.selftest-" + run
+    }
 
     enum Item: String {
         case vaultKey = "payment-vault-key"
@@ -87,6 +95,14 @@ enum Keychain {
             kSecAttrAccount as String: item.rawValue
         ]
         SecItemDelete(query as CFDictionary)
+    }
+
+    /// Removes this self-test run's own items when it exits, so test keys
+    /// don't pile up in the login Keychain. Does nothing outside a self-test,
+    /// so it can never reach the real items.
+    static func clearSelfTestItems() {
+        guard service.contains(".selftest-") else { return }
+        for item in [Item.vaultKey, .vaultFingerprint, .publishToken] { delete(item) }
     }
 
     /// Where the vault key actually ended up.

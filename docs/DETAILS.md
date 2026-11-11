@@ -84,8 +84,11 @@ unconfigured or plain-http address refuses to publish at all.
   into a draft invoice on demand, carrying the deliverable as its line item, the
   milestone's date as its due date and the project's client as the customer.
 - Drafts, never sends. "Invoice 3 unbilled" bills everything outstanding in one
-  go, oldest due date first so the numbers run in the order the money is owed —
-  and ⌘Z takes the whole batch back in a single step.
+  go, either as separate invoices, oldest due date first so the numbers run in
+  the order the money is owed, or as **one invoice with a line for each
+  payment**, due on the latest of their dates. Every payment it covers is marked
+  billed by it, and trashing it frees them all again. Either way ⌘Z takes the
+  whole batch back in a single step.
 - **A milestone cannot be billed twice.** The schedule links to the invoice it
   produced, and the button is gone while that invoice exists.
 - A trashed invoice releases its milestone. It stops counting toward the totals,
@@ -291,10 +294,13 @@ unconfigured or plain-http address refuses to publish at all.
 - Writing the key is add-if-absent for the same reason: an update would
   overwrite the only copy that opens the existing vault. Replacing a key
   happens only through the explicit repair button.
-- Self-tests that write get their own throwaway data directory, so no
-  diagnostic can touch the real vault. That is not hypothetical: a headless
-  test run under a different code signature is exactly how a vault got
-  orphaned during development.
+- Every `--selftest-*` run gets a throwaway data directory **and** throwaway
+  Keychain items (a service name of its own, deleted when the run exits),
+  decided once at launch rather than by each suite. A self-test that still
+  resolves the real data folder stops with a fatal error before touching it.
+  None of this is hypothetical: a headless run under a different code
+  signature once orphaned a vault, and the vault suite, which skipped the
+  sandbox, once deleted the real `vault.dat` and its fingerprint.
 - If the Keychain is unreachable — most often because the app was rebuilt or
   re-signed, since Keychain ACLs follow the signing identity — the key falls back
   to a 0600 file beside the data and Settings says so. That still encrypts the
